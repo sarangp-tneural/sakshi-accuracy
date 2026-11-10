@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Mark, Project, User, Video
+from .models import Camera, Mark, Project, User, Video
 from .security import decode_token
 
 
@@ -37,3 +37,11 @@ def get_mark(db: Session, user: User, mark_id: int) -> Mark:
         raise HTTPException(404, "Mark not found")
     get_video(db, user, m.video_id)
     return m
+
+
+def get_camera(db: Session, user: User, camera_id: int) -> Camera:
+    c = db.get(Camera, camera_id)
+    if not c:
+        raise HTTPException(404, "Camera not found")
+    get_project(db, user, c.project_id)  # 404 when the project is not the user's
+    return c

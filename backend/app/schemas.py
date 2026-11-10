@@ -51,6 +51,8 @@ class VideoOut(BaseModel):
     mark_female: int = 0
     mark_unknown: int = 0
     sakshi_entered: bool = False
+    camera_id: int | None = None
+    camera_name: str | None = None
 
 
 class VideoListOut(BaseModel):
@@ -60,6 +62,35 @@ class VideoListOut(BaseModel):
     page_size: int
     status_counts: dict[str, int]  # per status under every active filter except the status filter itself, plus "all"
     busy: bool  # any video of the project is recording or processing (ignores filters)
+
+
+class CameraIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(max_length=2000)
+    default_minutes: int = 30
+
+
+class CameraPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    url: str | None = Field(default=None, max_length=2000)  # leave out to keep the saved link
+    default_minutes: int | None = None
+
+
+class CameraOut(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    rtsp_url_masked: str  # the real link is never returned
+    default_minutes: int
+    created_at: datetime
+    last_recorded_at: datetime | None = None
+    recording_video_id: int | None = None  # the recording in progress, if any
+    recording_started_at: datetime | None = None
+    recording_minutes: int | None = None
+
+
+class RecordCameraIn(BaseModel):
+    minutes: int | None = None  # default: the camera's saved length
 
 
 class RtspIn(BaseModel):

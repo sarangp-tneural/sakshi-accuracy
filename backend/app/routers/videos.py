@@ -9,10 +9,11 @@ from sqlalchemy import and_, exists, func, not_, or_, select
 from sqlalchemy.orm import Session
 
 from .. import control, rtsp, storage, worker
+from ..recording import start_recording
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, get_project, get_video
-from ..models import Mark, SakshiResult, User, Video
+from ..models import Camera, Mark, SakshiResult, User, Video
 from ..schemas import RtspIn, RtspPreviewIn, VideoListOut, VideoOut
 
 router = APIRouter(tags=["videos"])
@@ -54,6 +55,11 @@ def with_summary(db: Session, videos: list[Video]) -> list[VideoOut]:
         by_id[vid].sakshi_entered = True
     for o in outs:
         o.mark_unknown = o.mark_total - o.mark_male - o.mark_female
+    cam_ids = {o.camera_id for o in outs if o.camera_id}
+    if cam_ids:
+        names = dict(db.execute(select(Camera.id, Camera.name).where(Camera.id.in_(cam_ids))).all())
+        for o in outs:
+            o.camera_name = names.get(o.camera_id)
     return outs
 
 
@@ -165,21 +171,7 @@ async def upload_video(project_id: int, file: UploadFile = File(...), db: Sessio
 @router.post("/projects/{project_id}/videos/rtsp", response_model=VideoOut, status_code=201)
 def record_video(project_id: int, body: RtspIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     get_project(db, user, project_id)
-    url = body.url.strip()
-    if err := rtsp.validate_rtsp_url(url) or rtsp.validate_minutes(body.minutes):
-        raise HTTPException(422, err)
-    storage.ensure_disk_space(body.minutes * settings.rtsp_bytes_per_minute)
-    masked = rtsp.mask_url(url)
-    v = Video(project_id=project_id, name=(body.name or f"RTSP {masked}")[:255], source="rtsp",
-              status="recording", rtsp_url_enc=rtsp.encrypt_url(url), rtsp_url_masked=masked,
-              rtsp_minutes=body.minutes)
-    db.add(v)
-    db.flush()
-    v.file_path = str(storage.video_dir(v.id) / "original.mp4")
-    db.commit()
-    worker.enqueue(worker.record_rtsp, v.id)
-    db.refresh(v)
-    return v
+    return start_recording(db, project_id=project_id, url=body.url.strip(), minutes=body.minutes, name=body.name)
 
 
 @router.post("/projects/{project_id}/rtsp/preview")

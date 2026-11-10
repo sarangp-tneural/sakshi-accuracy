@@ -25,6 +25,13 @@ cd frontend && npm test
 ## Where things are
 Projects → a project has two tabs: **Videos** (upload, RTSP, list) and **Settings** (shortcuts, reaction delay, sound, slow-after-jump). Settings belong to your account, so they apply to every project. On the Count screen the **⚙ Settings** button opens the same panel as a drawer without touching the video position.
 
+## Saved cameras (one-click recording)
+For accuracy checks you record from the same RTSP link again and again, so save it once per project. On a project's **Videos** tab, **+ Add camera** stores a name, the link and a default length. Each camera is a card with **● Start recording · 30 min**: one click records with the saved length (the length picker beside it changes it for that run only; **⋯ › Edit** changes the default). While it records the card shows elapsed / total and **Stop**; a camera that is already recording cannot be started twice. **⋯** also has Preview (a still frame) and Delete (recordings already made are kept). The one-off **Record from camera** dialog has a "Save as a camera for this project" option.
+
+The link is stored encrypted and is never sent back to the browser (only `rtsp://***:***@host/path`); editing a camera keeps the saved link unless you choose **Change link**. Videos show which camera they came from. **Keep `SECRET_KEY` stable:** it encrypts the saved links, so if it ever changes the app tells you to re-enter each link (it also signs logins).
+
+API: `GET/POST /api/projects/{id}/cameras`, `PATCH/DELETE /api/cameras/{id}`, `POST /api/cameras/{id}/record` (`{minutes?}`), `POST /api/cameras/{id}/preview`. Run `alembic upgrade head` (or `./run.sh`) to add the cameras table.
+
 ## Videos screen
 A project's **Videos** tab is a table (one row per video). **+ Upload video** and **● Record from camera** (top right) open dialogs; you can also **drag files anywhere on the page** to upload (progress shows as a row at the top of the list, so nothing blocks you).
 

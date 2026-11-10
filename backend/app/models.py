@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -35,6 +35,22 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class Camera(Base):
+    """A saved RTSP source of a project, so a recording is one click. The link is stored encrypted and never returned."""
+    __tablename__ = "cameras"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    rtsp_url_enc: Mapped[str] = mapped_column(Text)
+    rtsp_url_masked: Mapped[str] = mapped_column(Text)
+    default_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+# one name per project, ignoring case
+Index("uq_cameras_project_name", Camera.project_id, func.lower(Camera.name), unique=True)
+
+
 class Video(Base):
     __tablename__ = "videos"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -50,6 +66,7 @@ class Video(Base):
     rtsp_url_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     rtsp_url_masked: Mapped[str | None] = mapped_column(Text, nullable=True)
     rtsp_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id", ondelete="SET NULL"), nullable=True, index=True)
     # when ffmpeg actually started / finished recording (created_at is when it was requested)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

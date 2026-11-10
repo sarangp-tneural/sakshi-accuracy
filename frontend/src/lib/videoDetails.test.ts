@@ -7,7 +7,7 @@ const base: Video = {
   id: 1, project_id: 1, name: "cam", source: "upload", status: "ready", status_reason: null, duration_s: 127.8, fps: 25,
   rtsp_url_masked: null, rtsp_minutes: null, created_at: "2026-11-10T12:47:31Z", started_at: null, ended_at: null,
   file_size: 40_500_000, width: 1920, height: 1080, vcodec: "h264",
-  mark_total: 0, mark_in: 0, mark_out: 0, mark_male: 0, mark_female: 0, mark_unknown: 0, sakshi_entered: false,
+  mark_total: 0, mark_in: 0, mark_out: 0, mark_male: 0, mark_female: 0, mark_unknown: 0, sakshi_entered: false, camera_id: null, camera_name: null,
 };
 const rtsp = (o: Partial<Video> = {}): Video => ({ ...base, source: "rtsp", rtsp_url_masked: "rtsp://***:***@10.0.0.5:554/ch1", rtsp_minutes: 5,
   started_at: "2026-11-10T12:00:00Z", ended_at: "2026-11-10T12:05:00Z", duration_s: 300, ...o });
@@ -60,6 +60,10 @@ describe("videoDetails: RTSP recordings", () => {
     expect(get(d, "Recording ended")?.value).toBe(fmtDateTime("2026-11-10T12:05:00Z"));
     expect(get(d, "Recorded")).toMatchObject({ value: "05:00 of 05:00 planned" });
     expect(get(d, "Recorded")?.tone).toBeUndefined();
+  });
+  it("shows which saved camera it came from", () => {
+    expect(get(videoDetails(rtsp({ camera_id: 3, camera_name: "Entrance" }), 0), "Camera")?.value).toBe("Entrance");
+    expect(get(videoDetails(rtsp(), 0), "Camera")).toBeUndefined(); // a one-off link has no camera
   });
   it("a recording that ended early is flagged", () => {
     const d = videoDetails(rtsp({ duration_s: 61, status_reason: "Stopped manually after 61 s" }), 0);

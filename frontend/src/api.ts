@@ -40,10 +40,14 @@ export interface Video {
   rtsp_url_masked: string | null; rtsp_minutes: number | null; created_at: string;
   started_at: string | null; ended_at: string | null; file_size: number | null;
   width: number | null; height: number | null; vcodec: string | null;
-  mark_total: number; mark_in: number; mark_out: number; mark_male: number; mark_female: number; mark_unknown: number; sakshi_entered: boolean;
+  mark_total: number; mark_in: number; mark_out: number; mark_male: number; mark_female: number; mark_unknown: number; sakshi_entered: boolean; camera_id: number | null; camera_name: string | null;
 }
 export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number | null; y: number | null }
 export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
+export interface Camera {
+  id: number; project_id: number; name: string; rtsp_url_masked: string; default_minutes: number; created_at: string;
+  last_recorded_at: string | null; recording_video_id: number | null; recording_started_at: string | null; recording_minutes: number | null;
+}
 export interface VideoList {
   items: Video[]; total: number; page: number; page_size: number;
   status_counts: Record<"all" | "ready" | "recording" | "processing" | "partial" | "failed", number>;
@@ -64,6 +68,11 @@ export const api = {
     return req<Video>(`/projects/${pid}/videos/upload`, { method: "POST", body: fd });
   },
   rtsp: (pid: number, url: string, minutes: number) => req<Video>(`/projects/${pid}/videos/rtsp`, { method: "POST", body: body({ url, minutes }) }),
+  cameras: (pid: number) => req<Camera[]>(`/projects/${pid}/cameras`),
+  createCamera: (pid: number, c: { name: string; url: string; default_minutes: number }) => req<Camera>(`/projects/${pid}/cameras`, { method: "POST", body: body(c) }),
+  updateCamera: (id: number, c: { name?: string; url?: string; default_minutes?: number }) => req<Camera>(`/cameras/${id}`, { method: "PATCH", body: body(c) }),
+  deleteCamera: (id: number) => req<void>(`/cameras/${id}`, { method: "DELETE" }),
+  recordCamera: (id: number, minutes?: number) => req<Video>(`/cameras/${id}/record`, { method: "POST", body: body(minutes === undefined ? {} : { minutes }) }),
   stopRecording: (id: number) => req<Video>(`/videos/${id}/stop`, { method: "POST" }),
   deleteVideo: (id: number) => req<void>(`/videos/${id}`, { method: "DELETE" }),
   marks: (vid: number) => req<Mark[]>(`/videos/${vid}/marks`),
@@ -107,12 +116,11 @@ export function uploadWithProgress(pid: number, file: File, onProgress: (pct: nu
   return { promise, cancel: () => xhr.abort() };
 }
 
-/** One still frame from an RTSP link (the link goes in the body, never in a URL). Returns an object URL. */
-export async function rtspPreview(pid: number, url: string, signal?: AbortSignal): Promise<string> {
-  const r = await fetch(`/api/projects/${pid}/rtsp/preview`, {
+async function fetchJpeg(path: string, bodyObj: unknown, signal?: AbortSignal): Promise<string> {
+  const r = await fetch(`/api${path}`, {
     method: "POST", signal,
     headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify(bodyObj),
   });
   if (!r.ok) {
     let msg = `Preview failed (${r.status})`;
@@ -121,6 +129,11 @@ export async function rtspPreview(pid: number, url: string, signal?: AbortSignal
   }
   return URL.createObjectURL(await r.blob());
 }
+
+/** One still frame from an RTSP link (the link goes in the body, never in a URL). Returns an object URL. */
+export const rtspPreview = (pid: number, url: string, signal?: AbortSignal) => fetchJpeg(`/projects/${pid}/rtsp/preview`, { url }, signal);
+/** One still frame from a saved camera. */
+export const cameraPreview = (id: number, signal?: AbortSignal) => fetchJpeg(`/cameras/${id}/preview`, {}, signal);
 
 /** Download an export through fetch so the UI can show loading and errors. */
 export async function downloadExport(id: number, kind: "csv" | "xlsx"): Promise<void> {

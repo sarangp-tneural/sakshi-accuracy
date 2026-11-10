@@ -19,6 +19,7 @@ export function videoDetails(v: Video, now: number): Detail[] {
   const planned = (v.rtsp_minutes ?? 0) * 60;
 
   if (isRtsp) {
+    if (v.camera_name) out.push({ label: "Camera", value: v.camera_name });
     if (v.rtsp_url_masked) out.push({ label: "Stream", value: v.rtsp_url_masked, wide: true, mono: true });
     out.push({ label: "Requested", value: fmtDateTime(v.created_at) });
     const startedMs = v.started_at ? new Date(v.started_at).getTime() : null;

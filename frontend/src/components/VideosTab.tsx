@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type Video } from "../api";
+import { api, cameraPreview, type Camera, type Video } from "../api";
+import { useCameras } from "../hooks/useCameras";
+import { useNow } from "../hooks/useNow";
 import { useUploads } from "../hooks/useUploads";
 import { useVideoList } from "../hooks/useVideoList";
 import { lastPage, hasActiveFilters, rangeLabel, type StatusKey } from "../lib/videoFilters";
 import { deleteWarning } from "../lib/videoRow";
+import CameraDialog from "./cameras/CameraDialog";
+import CameraPreview from "./cameras/CameraPreview";
+import CameraStrip from "./cameras/CameraStrip";
 import ExportDialog from "./ExportDialog";
 import ProjectHeader from "./ProjectHeader";
 import { Button, EmptyState, LoadError, Spinner } from "./ui/bits";
-import { ConfirmDialog } from "./ui/Modal";
+import { ConfirmDialog, Modal } from "./ui/Modal";
 import { useToast } from "./ui/Toast";
 import { RecordDialog, UploadDialog } from "./videos/AddVideoDialogs";
 import DropOverlay from "./videos/DropOverlay";
@@ -23,7 +28,13 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
   const [dialog, setDialog] = useState<"upload" | "record" | null>(null);
   const [del, setDel] = useState<Video | null>(null);
   const [exp, setExp] = useState<Video | null>(null);
-  const [stopping, setStopping] = useState<Video | null>(null);
+  const [stopping, setStopping] = useState<{ id: number; name: string } | null>(null);
+  const { cameras, reload: reloadCameras } = useCameras(projectId);
+  const camNow = useNow(cameras?.some((c) => c.recording_video_id !== null) ?? false);
+  const [startingCam, setStartingCam] = useState<number | null>(null);
+  const [camDialog, setCamDialog] = useState<{ camera?: Camera } | null>(null);
+  const [camDel, setCamDel] = useState<Camera | null>(null);
+  const [camPreview, setCamPreview] = useState<Camera | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const uploads = useUploads(projectId, useCallback(() => { toast.success("Upload complete. Preparing the video…"); reload(); }, [toast, reload]));
@@ -42,6 +53,16 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
     if (files.length > rejected.length) setDialog(null);
   }, [uploads, toast]);
 
+  const startCamera = async (c: Camera, minutes: number) => {
+    setStartingCam(c.id);
+    try {
+      await api.recordCamera(c.id, minutes);
+      toast.success(`Recording started: ${c.name} for ${minutes} min`);
+      reload();
+    } catch (e) { toast.error(e); }
+    finally { setStartingCam(null); reloadCameras(); }
+  };
+
   const toggleStatus = (s: StatusKey) => update({ status: filters.status.includes(s) ? filters.status.filter((x) => x !== s) : [...filters.status, s] });
   const active = hasActiveFilters(filters);
   const total = data?.total ?? 0;
@@ -56,6 +77,13 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
           <Button onClick={() => setDialog("record")}><span className="rec-dot sm" aria-hidden /> Record from camera</Button>
         </div>
       } />
+
+      {cameras && (
+        <CameraStrip cameras={cameras} now={camNow} startingId={startingCam}
+          onAdd={() => setCamDialog({})} onStart={startCamera}
+          onStop={(c) => c.recording_video_id !== null && setStopping({ id: c.recording_video_id, name: c.name })}
+          onPreview={setCamPreview} onEdit={(c) => setCamDialog({ camera: c })} onDelete={setCamDel} />
+      )}
 
       {error && <LoadError message={error} onRetry={reloadLoud} />}
       {!data && !error && <div><Spinner /> Loading videos…</div>}
@@ -85,7 +113,7 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
             </div>
           ) : (
             <VideoTable items={data.items} uploads={uploads.items} now={now} dim={loading}
-              onCancelUpload={uploads.cancel} onOpen={(v) => nav(`/videos/${v.id}`)} onStop={setStopping} onExport={setExp} onDelete={setDel} />
+              onCancelUpload={uploads.cancel} onOpen={(v) => nav(`/videos/${v.id}`)} onStop={(v) => setStopping({ id: v.id, name: v.name })} onExport={setExp} onDelete={setDel} />
           )}
 
           {(total > data.page_size || filters.page > 1) && (
@@ -102,7 +130,19 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
 
       <DropOverlay onFiles={addFiles} />
       {dialog === "upload" && <UploadDialog onFiles={addFiles} onClose={() => setDialog(null)} />}
-      {dialog === "record" && <RecordDialog projectId={projectId} onStarted={reloadLoud} onClose={() => setDialog(null)} />}
+      {dialog === "record" && <RecordDialog projectId={projectId} onStarted={() => { reloadLoud(); reloadCameras(); }} onClose={() => setDialog(null)} />}
+      {camDialog && <CameraDialog projectId={projectId} camera={camDialog.camera} onSaved={() => { reloadCameras(); reload(); }} onClose={() => setCamDialog(null)} />}
+      {camPreview && (
+        <Modal title={`Preview: ${camPreview.name}`} onClose={() => setCamPreview(null)} wide>
+          <CameraPreview autoStart fetcher={(signal) => cameraPreview(camPreview.id, signal)} />
+        </Modal>
+      )}
+      {camDel && (
+        <ConfirmDialog title="Delete camera?" danger confirmLabel="Delete camera"
+          message={`“${camDel.name}” and its saved link will be removed. Recordings already made are kept.`}
+          onCancel={() => setCamDel(null)}
+          onConfirm={() => { const c = camDel; setCamDel(null); api.deleteCamera(c.id).then(() => { toast.success("Camera deleted"); reloadCameras(); reload(); }).catch(toast.error); }} />
+      )}
       {del && (
         <ConfirmDialog title="Delete video?" danger confirmLabel="Delete" message={deleteWarning(del)}
           onCancel={() => setDel(null)}
@@ -112,7 +152,7 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
         <ConfirmDialog title="Stop recording?" confirmLabel="Stop and keep video"
           message="Recording stops now and the part recorded so far is saved as a video you can count."
           onCancel={() => setStopping(null)}
-          onConfirm={() => { const v = stopping; setStopping(null); api.stopRecording(v.id).then(() => { toast.info("Stopping… saving the video"); reload(); }).catch(toast.error); }} />
+          onConfirm={() => { const v = stopping; setStopping(null); api.stopRecording(v.id).then(() => { toast.info("Stopping… saving the video"); reload(); reloadCameras(); }).catch(toast.error); }} />
       )}
       {exp && <ExportDialog videoId={exp.id} videoName={exp.name} onClose={() => setExp(null)} />}
     </div>
