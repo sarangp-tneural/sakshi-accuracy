@@ -14,6 +14,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import current_user, get_project, get_video
 from ..models import Camera, Mark, SakshiResult, User, Video
+from ..sql import sakshi_has_value
 from ..schemas import RtspIn, RtspPreviewIn, VideoListOut, VideoOut
 
 router = APIRouter(tags=["videos"])
@@ -22,12 +23,6 @@ router = APIRouter(tags=["videos"])
 STATUSES = ("ready", "recording", "processing", "partial", "failed")
 BUSY = ("recording", "processing")
 StatusT = Literal["ready", "recording", "processing", "partial", "failed"]
-
-
-def _sakshi_has_value():
-    """A saved all-blank Sakshi form does not count as a result."""
-    return or_(SakshiResult.in_count.isnot(None), SakshiResult.out_count.isnot(None),
-               SakshiResult.male_count.isnot(None), SakshiResult.female_count.isnot(None))
 
 
 def with_summary(db: Session, videos: list[Video]) -> list[VideoOut]:
@@ -51,7 +46,7 @@ def with_summary(db: Session, videos: list[Video]) -> list[VideoOut]:
             o.mark_male += n
         elif gender == "female":
             o.mark_female += n
-    for (vid,) in db.execute(select(SakshiResult.video_id).where(SakshiResult.video_id.in_(ids), _sakshi_has_value())):
+    for (vid,) in db.execute(select(SakshiResult.video_id).where(SakshiResult.video_id.in_(ids), sakshi_has_value())):
         by_id[vid].sakshi_entered = True
     for o in outs:
         o.mark_unknown = o.mark_total - o.mark_male - o.mark_female
@@ -96,7 +91,7 @@ def list_videos(
         raise HTTPException(422, "added_from must not be after added_to")
 
     marks = select(Mark.video_id.label("vid"), func.count().label("n")).group_by(Mark.video_id).subquery()
-    sakshi = select(SakshiResult.video_id.label("vid")).where(_sakshi_has_value()).subquery()
+    sakshi = select(SakshiResult.video_id.label("vid")).where(sakshi_has_value()).subquery()
     n_marks = func.coalesce(marks.c.n, 0)
     compared = sakshi.c.vid.isnot(None)
 

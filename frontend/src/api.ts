@@ -32,7 +32,11 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 const body = (b: unknown) => JSON.stringify(b);
 
-export interface Project { id: number; name: string }
+export interface Project {
+  id: number; name: string; created_at: string;
+  video_count: number; recording_count: number; processing_count: number; failed_count: number; camera_count: number;
+  mark_total: number; mark_in: number; mark_out: number; compared_count: number; total_duration_s: number; last_activity_at: string | null;
+}
 export interface Video {
   id: number; project_id: number; name: string; source: "upload" | "rtsp";
   status: "processing" | "ready" | "recording" | "partial" | "failed";

@@ -22,6 +22,18 @@ class ProjectOut(BaseModel):
     id: int
     name: str
     created_at: datetime
+    # filled in by the list endpoint (zeros for a project that was just created)
+    video_count: int = 0
+    recording_count: int = 0
+    processing_count: int = 0
+    failed_count: int = 0
+    camera_count: int = 0
+    mark_total: int = 0
+    mark_in: int = 0
+    mark_out: int = 0
+    compared_count: int = 0  # videos with a Sakshi result entered
+    total_duration_s: float = 0.0
+    last_activity_at: datetime | None = None  # newest of: project created, video added, mark counted
 
 
 class VideoOut(BaseModel):

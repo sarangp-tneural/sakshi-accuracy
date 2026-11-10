@@ -25,6 +25,9 @@ cd frontend && npm test
 ## Where things are
 Projects → a project has two tabs: **Videos** (upload, RTSP, list) and **Settings** (shortcuts, reaction delay, sound, slow-after-jump). Settings belong to your account, so they apply to every project. On the Count screen the **⚙ Settings** button opens the same panel as a drawer without touching the video position.
 
+## Projects page
+Each project is a card showing its videos, cameras, marks (IN / OUT), total video time, what is recording / processing / failed right now, how many videos are compared with Sakshi (with a progress bar) and when it was last active. The most recently active project is first. `GET /api/projects` returns these totals (a fixed number of queries however many projects there are).
+
 ## Saved cameras (one-click recording)
 For accuracy checks you record from the same RTSP link again and again, so save it once per project. On a project's **Videos** tab, **+ Add camera** stores a name, the link and a default length. Each camera is a card with **● Start recording · 30 min**: one click records with the saved length (the length picker beside it changes it for that run only; **⋯ › Edit** changes the default). While it records the card shows elapsed / total and **Stop**; a camera that is already recording cannot be started twice. **⋯** also has Preview (a still frame) and Delete (recordings already made are kept). The one-off **Record from camera** dialog has a "Save as a camera for this project" option.
 

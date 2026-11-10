@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api, type Project } from "../api";
 import { Button, EmptyState, Field, LoadError, Spinner } from "../components/ui/bits";
+import ProjectCard from "../components/projects/ProjectCard";
 import { Modal } from "../components/ui/Modal";
 import { useToast } from "../components/ui/Toast";
 
@@ -12,6 +13,7 @@ export default function Projects() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
+  const now = Date.now();
   const toast = useToast();
 
   const load = () => api.projects().then((p) => { setProjects(p); setErr(""); }).catch((e) => setErr(e.message));
@@ -35,12 +37,8 @@ export default function Projects() {
       {projects === null && !err && <div><Spinner /> Loading projects…</div>}
       {projects && projects.length === 0 && <div className="card"><EmptyState title="No projects yet"><Button variant="primary" onClick={() => setCreating(true)}>Create your first project</Button></EmptyState></div>}
       {projects && projects.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "var(--s-3)" }}>
-          {projects.map((p) => (
-            <Link key={p.id} to={`/projects/${p.id}`} className="card" style={{ textDecoration: "none", color: "var(--text)" }}>
-              <h3>{p.name}</h3><span className="small muted">Created {new Date((p as Project & { created_at?: string }).created_at ?? Date.now()).toLocaleDateString()}</span>
-            </Link>
-          ))}
+        <div className="pgrid">
+          {projects.map((p) => <ProjectCard key={p.id} p={p} now={now} />)}
         </div>
       )}
       {creating && (
