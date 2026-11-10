@@ -1,0 +1,62 @@
+/* Design tokens: the single place for colors, spacing, type, radii, shadows.
+   Light is the default (Login, Projects, Videos, Settings); .theme-dark is applied on the Count screen. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceff3;
+  --text: #1b1f24;
+  --muted: #5a6472;
+  --border: #d3d9e0;
+  --primary: #1d4ed8;
+  --primary-text: #ffffff;
+  --danger: #b91c1c;
+  --focus: #1d4ed8;
+  --flash: #fde68a;
+  --stage: #000000;
+
+  /* meaning colors (used for text/icons on --surface) */
+  --in: #1d4ed8;
+  --out: #b53b0a;
+  --male: #6d4aa8;
+  --female: #00785a;
+  --unknown: #5a6472;
+  --good: #166534;
+  --warn: #92400e;
+  --bad: #b91c1c;
+
+  /* spacing, type, shape */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 24px; --fs-num: 34px;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.08);
+  --shadow-2: 0 8px 28px rgba(0,0,0,.22);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --topbar-h: 48px;
+}
+
+.theme-dark {
+  color-scheme: dark;
+  --bg: #0f1216;
+  --surface: #1a1f25;
+  --surface-2: #252c34;
+  --text: #e8eaed;
+  --muted: #9aa4b0;
+  --border: #2f3740;
+  --primary: #2563eb;
+  --primary-text: #ffffff;
+  --danger: #f87171;
+  --focus: #93c5fd;
+  --flash: #4a3b0a;
+
+  --in: #6ea8fe;
+  --out: #fb923c;
+  --male: #b79df0;
+  --female: #34d3a4;
+  --unknown: #9aa4b0;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --shadow-2: 0 8px 28px rgba(0,0,0,.6);
+}

@@ -1,0 +1,19 @@
+{
+  "actions": [
+    {"name": "male_in",       "label": "Male IN",            "group": "count", "default": "KeyF"},
+    {"name": "male_out",      "label": "Male OUT",           "group": "count", "default": "KeyD"},
+    {"name": "female_in",     "label": "Female IN",          "group": "count", "default": "KeyJ"},
+    {"name": "female_out",    "label": "Female OUT",         "group": "count", "default": "KeyK"},
+    {"name": "in_unknown",    "label": "IN (gender unknown)", "group": "count", "default": "KeyG"},
+    {"name": "out_unknown",   "label": "OUT (gender unknown)","group": "count", "default": "KeyH"},
+    {"name": "play_pause",    "label": "Play / pause",       "group": "player", "default": "Space"},
+    {"name": "undo",          "label": "Undo last mark",     "group": "player", "default": "KeyZ"},
+    {"name": "jump_back",     "label": "Jump back 3 s",      "group": "player", "default": "KeyX"},
+    {"name": "speed_1",       "label": "Speed 1x",           "group": "player", "default": "Digit1"},
+    {"name": "speed_2",       "label": "Speed 2x",           "group": "player", "default": "Digit2"},
+    {"name": "speed_3",       "label": "Speed 3x",           "group": "player", "default": "Digit3"},
+    {"name": "speed_4",       "label": "Speed 4x",           "group": "player", "default": "Digit4"},
+    {"name": "step_back",     "label": "Step one frame back","group": "player", "default": "ArrowLeft"},
+    {"name": "step_forward",  "label": "Step one frame forward","group": "player", "default": "ArrowRight"}
+  ]
+}
