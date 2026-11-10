@@ -4,7 +4,7 @@ import { DIRECTION_META, GENDER_META, type Direction, type Gender } from "../../
 import { keyLabel } from "../../keys/registry";
 
 export function Button({ variant = "secondary", size, className = "", ...p }:
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" | "danger"; size?: "sm" | "lg" | "icon" }) {
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" | "danger" | "record"; size?: "sm" | "lg" | "icon" }) {
   const v = variant === "secondary" ? "" : variant;
   return <button type="button" {...p} className={`btn ${v} ${size ?? ""} ${className}`.trim()} />;
 }

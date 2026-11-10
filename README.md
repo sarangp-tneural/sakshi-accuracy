@@ -25,6 +25,18 @@ cd frontend && npm test
 ## Where things are
 Projects → a project has two tabs: **Videos** (upload, RTSP, list) and **Settings** (shortcuts, reaction delay, sound, slow-after-jump). Settings belong to your account, so they apply to every project. On the Count screen the **⚙ Settings** button opens the same panel as a drawer without touching the video position.
 
+## Videos screen
+A project's **Videos** tab is a table (one row per video). **+ Upload video** and **● Record from camera** (top right) open dialogs; you can also **drag files anywhere on the page** to upload (progress shows as a row at the top of the list, so nothing blocks you).
+
+Columns: name, source, status (Recording shows elapsed / total and a Stop button), duration, marks (IN / OUT), gender (M / F / ?), Sakshi entered or not, added. **Count** opens the video; Export and Delete are under **⋯** (Delete says which marks and Sakshi result go with it). Click a row to open it, or the ▸ to expand the details (RTSP stream, requested / started / ended, recorded vs planned, video info, file size, why a recording is partial or failed).
+
+Search by name, filter by status (chips with counts), source, progress (not started / counting / compared) and date added, and sort. Everything is in the URL, so a refresh or a shared link keeps it. Lists are paged (25 per page). The page only polls the server while something is recording or processing.
+
+`GET /api/projects/{id}/videos` takes `q, status (repeatable), source, progress, added_from, added_to, sort (newest|oldest|name|duration), page, page_size` and returns `{items, total, page, page_size, status_counts, busy}`; invalid values get a 422.
+
+Videos created before file size / resolution were stored show "—" there. Fill them in from the files on disk (dry run first, then `--apply`):
+`uv run --project backend python scripts/backfill_video_details.py`. Start and end times of old recordings cannot be recovered.
+
 ## Player (review-style controls)
 - **Timeline** (under the video): drag to scrub, click a marker to select it, **Ctrl + wheel** zooms, **Shift + wheel** pans, `− + ⤢` buttons. IN markers on the upper row, OUT on the lower; the ring colour is the gender; a diamond means the mark has a point.
 - **Picture zoom:** Ctrl + wheel on the video (up to 8x), drag to pan, **Reset** in the badge.

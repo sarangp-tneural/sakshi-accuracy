@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -50,6 +50,13 @@ class Video(Base):
     rtsp_url_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     rtsp_url_masked: Mapped[str | None] = mapped_column(Text, nullable=True)
     rtsp_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # when ffmpeg actually started / finished recording (created_at is when it was requested)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes of the original
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vcodec: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     marks: Mapped[list["Mark"]] = relationship(cascade="all, delete-orphan", order_by="Mark.time_s")
 

@@ -39,3 +39,39 @@ export function fmtPercent(m: Metric): string {
   if (m.percent === null) return "not defined";
   return (m.percent > 0 ? "+" : "") + m.percent.toFixed(1) + "%";
 }
+
+/** "10 Nov 2026, 06:17:31 PM": date and time with seconds, in the viewer's locale. */
+export function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/** "38.6 MB". */
+export function fmtBytes(n: number | null | undefined): string {
+  if (n === null || n === undefined || n < 0) return "—";
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = n / 1024, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
+}
+
+const CODECS: Record<string, string> = { h264: "H.264", hevc: "H.265", mpeg4: "MPEG-4", vp9: "VP9", av1: "AV1", mjpeg: "MJPEG" };
+/** "1920×1080 · 25 fps · H.264" with whatever is known. */
+export function fmtStream(w: number | null, h: number | null, fps: number | null, codec: string | null): string {
+  const parts: string[] = [];
+  if (w && h) parts.push(`${w}×${h}`);
+  if (fps) parts.push(`${Number.isInteger(fps) ? fps : fps.toFixed(1)} fps`);
+  if (codec) parts.push(CODECS[codec] ?? codec.toUpperCase());
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+/** "10 Nov, 18:17": compact date and time for table cells. */
+export function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}

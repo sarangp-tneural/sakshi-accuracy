@@ -37,6 +37,29 @@ class VideoOut(BaseModel):
     rtsp_url_masked: str | None
     rtsp_minutes: int | None
     created_at: datetime
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    file_size: int | None = None
+    width: int | None = None
+    height: int | None = None
+    vcodec: str | None = None
+    # filled by the list/get endpoints
+    mark_total: int = 0
+    mark_in: int = 0
+    mark_out: int = 0
+    mark_male: int = 0
+    mark_female: int = 0
+    mark_unknown: int = 0
+    sakshi_entered: bool = False
+
+
+class VideoListOut(BaseModel):
+    items: list[VideoOut]
+    total: int  # all videos matching the filters (not just this page)
+    page: int
+    page_size: int
+    status_counts: dict[str, int]  # per status under every active filter except the status filter itself, plus "all"
+    busy: bool  # any video of the project is recording or processing (ignores filters)
 
 
 class RtspIn(BaseModel):

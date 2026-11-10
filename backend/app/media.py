@@ -44,7 +44,7 @@ def probe_keyframe_gap(path: Path) -> float | None:
 
 
 def probe(path: Path) -> dict:
-    """Return {duration_s, fps, vcodec, container, max_keyframe_gap_s} via ffprobe."""
+    """Return {duration_s, fps, vcodec, width, height, container, max_keyframe_gap_s} via ffprobe."""
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
         capture_output=True, text=True, timeout=60, check=True,
@@ -64,6 +64,8 @@ def probe(path: Path) -> dict:
         "duration_s": float(dur) if dur else None,
         "fps": fps or None,
         "vcodec": v.get("codec_name"),
+        "width": v.get("width"),
+        "height": v.get("height"),
         "container": data.get("format", {}).get("format_name", ""),
         "max_keyframe_gap_s": probe_keyframe_gap(path),
     }

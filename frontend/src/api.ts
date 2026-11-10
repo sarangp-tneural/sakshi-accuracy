@@ -38,9 +38,17 @@ export interface Video {
   status: "processing" | "ready" | "recording" | "partial" | "failed";
   status_reason: string | null; duration_s: number | null; fps: number | null;
   rtsp_url_masked: string | null; rtsp_minutes: number | null; created_at: string;
+  started_at: string | null; ended_at: string | null; file_size: number | null;
+  width: number | null; height: number | null; vcodec: string | null;
+  mark_total: number; mark_in: number; mark_out: number; mark_male: number; mark_female: number; mark_unknown: number; sakshi_entered: boolean;
 }
 export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number | null; y: number | null }
 export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
+export interface VideoList {
+  items: Video[]; total: number; page: number; page_size: number;
+  status_counts: Record<"all" | "ready" | "recording" | "processing" | "partial" | "failed", number>;
+  busy: boolean;
+}
 export interface Sakshi { in_count: number | null; out_count: number | null; male_count: number | null; female_count: number | null }
 export interface UserSettings { reaction_delay_s: number; sound_enabled: boolean; slow_after_jump: boolean; key_bindings: Bindings }
 
@@ -48,7 +56,7 @@ export const api = {
   login: (email: string, password: string) => req<{ token: string }>("/auth/login", { method: "POST", body: body({ email, password }) }),
   projects: () => req<Project[]>("/projects"),
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: body({ name }) }),
-  videos: (pid: number) => req<Video[]>(`/projects/${pid}/videos`),
+  videos: (pid: number, params: URLSearchParams, signal?: AbortSignal) => req<VideoList>(`/projects/${pid}/videos?${params.toString()}`, { signal }),
   video: (id: number) => req<Video>(`/videos/${id}`),
   upload: (pid: number, file: File) => {
     const fd = new FormData();

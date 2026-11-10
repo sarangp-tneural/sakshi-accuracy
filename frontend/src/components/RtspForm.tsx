@@ -4,6 +4,7 @@ import { Button, Field, Spinner } from "./ui/bits";
 import { useToast } from "./ui/Toast";
 
 const MAX_MIN = 120;
+const QUICK_MINUTES = [5, 15, 30, 60];
 
 export function validateRtsp(url: string, minutes: number): { url?: string; minutes?: string } {
   const e: { url?: string; minutes?: string } = {};
@@ -15,7 +16,7 @@ export function validateRtsp(url: string, minutes: number): { url?: string; minu
   return e;
 }
 
-export default function RtspForm({ projectId, onStarted, onClose }: { projectId: number; onStarted: () => void; onClose: () => void }) {
+export default function RtspForm({ projectId, onStarted }: { projectId: number; onStarted: () => void }) {
   const [url, setUrl] = useState("");
   const [minutesText, setMinutesText] = useState("5"); // string so clearing the field never leaves a stray 0
   const minutes = minutesText.trim() === "" ? NaN : Number(minutesText);
@@ -68,20 +69,28 @@ export default function RtspForm({ projectId, onStarted, onClose }: { projectId:
     try {
       const v = await api.rtsp(projectId, url.trim(), minutes);
       toast.success(`Recording started: ${v.rtsp_url_masked ?? "stream"} for ${minutes} min`);
-      onStarted(); onClose();
+      onStarted();
+      // ready for the next camera, and no accidental double start
+      setUrl(""); setTouched(false); setLive(false); showFrame(null); setPreviewErr("");
     } catch (x) { setServerErr((x as Error).message); } finally { setBusy(false); }
   }
 
   return (
-    <form className="card stack" onSubmit={submit} noValidate>
-      <h3>Record from RTSP</h3>
+    <form className="stack" onSubmit={submit} noValidate aria-label="Record from camera">
+      <p className="muted small" style={{ margin: 0 }}>Paste the RTSP link, pick how long, and it records and saves by itself.</p>
       <Field label="Stream link" htmlFor="rtsp-url" error={touched ? errs.url : null} hint="The password is stored encrypted and never shown again.">
-        <input id="rtsp-url" type="text" autoComplete="off" spellCheck={false} placeholder="rtsp://user:pass@host:554/stream" value={url}
+        <input id="rtsp-url" className="rec-input" type="text" autoComplete="off" spellCheck={false} placeholder="rtsp://user:pass@host:554/stream" value={url}
           aria-invalid={touched && !!errs.url} onChange={(e) => setUrl(e.target.value)} onBlur={() => setTouched(true)} />
       </Field>
-      <Field label="Minutes to record" htmlFor="rtsp-min" error={touched ? errs.minutes : null} hint={`1 to ${MAX_MIN} minutes. It stops by itself.`}>
-        <input id="rtsp-min" type="number" min={1} max={MAX_MIN} step={1} value={minutesText} style={{ width: 120 }}
-          aria-invalid={touched && !!errs.minutes} onChange={(e) => setMinutesText(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} />
+      <Field label="How long to record" htmlFor="rtsp-min" error={touched ? errs.minutes : null} hint={`1 to ${MAX_MIN} minutes. It stops by itself; you can also stop it any time.`}>
+        <div className="row">
+          <input id="rtsp-min" className="rec-input" type="number" min={1} max={MAX_MIN} step={1} value={minutesText} style={{ width: 110 }}
+            aria-invalid={touched && !!errs.minutes} onChange={(e) => setMinutesText(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} />
+          <span>minutes</span>
+          <div className="quick" role="group" aria-label="Quick durations">
+            {QUICK_MINUTES.map((m) => <Button key={m} size="sm" aria-pressed={minutes === m} onClick={() => setMinutesText(String(m))}>{m}</Button>)}
+          </div>
+        </div>
       </Field>
       <div className="stack">
         <div className="row">
@@ -93,7 +102,9 @@ export default function RtspForm({ projectId, onStarted, onClose }: { projectId:
         {frame && <span className="small muted">A still frame, not a live video. Check the angle and that people are visible before recording.</span>}
       </div>
       {serverErr && <p className="alert" role="alert">{serverErr}</p>}
-      <div className="row"><Button variant="primary" type="submit" disabled={busy}>{busy ? "Starting…" : "Start recording"}</Button><Button onClick={onClose}>Cancel</Button></div>
+      <Button variant="primary" size="lg" type="submit" disabled={busy} className="rec-go">
+        <span className="rec-dot sm" aria-hidden /> {busy ? "Starting…" : `Start recording${minutes >= 1 && minutes <= MAX_MIN ? ` · ${minutes} min` : ""}`}
+      </Button>
     </form>
   );
 }
