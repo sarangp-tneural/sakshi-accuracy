@@ -17,7 +17,9 @@ METRICS = ["in", "out", "total", "male", "female"]
 
 def _rows(db: Session, video_id: int):
     marks = db.scalars(select(Mark).where(Mark.video_id == video_id).order_by(Mark.time_s, Mark.id)).all()
-    mark_rows = [[m.id, round(m.time_s, 3), m.direction, m.gender, m.created_at.isoformat()] for m in marks]
+    mark_rows = [[m.id, round(m.time_s, 3), m.direction, m.gender,
+                  "" if m.x is None else round(m.x, 4), "" if m.y is None else round(m.y, 4),
+                  m.created_at.isoformat()] for m in marks]
     cmp = comparison_for(db, video_id)
     cmp_rows = []
     for k in METRICS:
@@ -28,7 +30,7 @@ def _rows(db: Session, video_id: int):
     return mark_rows, cmp_rows
 
 
-MARK_HEAD = ["id", "time_s", "direction", "gender", "created_at"]
+MARK_HEAD = ["id", "time_s", "direction", "gender", "x", "y", "created_at"]
 CMP_HEAD = ["metric", "manual", "sakshi", "difference", "difference_percent", "status"]
 
 

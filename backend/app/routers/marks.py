@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import current_user, get_mark, get_video
 from ..models import Mark, User
-from ..schemas import MarkIn, MarkOut, MarkPatch
+from ..schemas import MarkIn, MarkOut, MarkPatch, PointIn
 
 router = APIRouter(tags=["marks"])
 
@@ -34,6 +34,23 @@ def patch_mark(mark_id: int, body: MarkPatch, db: Session = Depends(get_db), use
         if val is None:
             raise HTTPException(422, f"{k} cannot be null")
         setattr(m, k, val)
+    db.commit()
+    return m
+
+
+@router.put("/marks/{mark_id}/point", response_model=MarkOut)
+def set_point(mark_id: int, body: PointIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Where on the picture this mark happened (normalised 0..1). Replaces any earlier point."""
+    m = get_mark(db, user, mark_id)
+    m.x, m.y = body.x, body.y
+    db.commit()
+    return m
+
+
+@router.delete("/marks/{mark_id}/point", response_model=MarkOut)
+def clear_point(mark_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    m = get_mark(db, user, mark_id)
+    m.x = m.y = None
     db.commit()
     return m
 

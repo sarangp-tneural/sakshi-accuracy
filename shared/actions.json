@@ -13,7 +13,7 @@
     {"name": "speed_2",       "label": "Speed 2x",           "group": "player", "default": "Digit2"},
     {"name": "speed_3",       "label": "Speed 3x",           "group": "player", "default": "Digit3"},
     {"name": "speed_4",       "label": "Speed 4x",           "group": "player", "default": "Digit4"},
-    {"name": "step_back",     "label": "Step one frame back","group": "player", "default": "ArrowLeft"},
-    {"name": "step_forward",  "label": "Step one frame forward","group": "player", "default": "ArrowRight"}
+    {"name": "step_back",     "label": "Step frames back (1 per speed)","group": "player", "default": "ArrowLeft"},
+    {"name": "step_forward",  "label": "Step frames forward (1 per speed)","group": "player", "default": "ArrowRight"}
   ]
 }

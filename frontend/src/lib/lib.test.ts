@@ -22,6 +22,13 @@ describe("decideKey", () => {
   it("maps bound keys by physical code", () => expect(decideKey(ev("KeyF"), DEFAULT_BINDINGS, { capturing: false })).toEqual({ type: "action", action: "male_in" }));
   it("ignores unbound keys", () => expect(decideKey(ev("KeyQ"), DEFAULT_BINDINGS, { capturing: false })).toEqual({ type: "ignore" }));
   it("ignores held keys but swallows them", () => expect(decideKey(ev("KeyF", { repeat: true }), DEFAULT_BINDINGS, { capturing: false })).toEqual({ type: "swallow" }));
+  it("lets listed actions repeat while held (frame stepping), but not counting keys", () => {
+    const opts = { capturing: false, repeatable: ["step_forward", "step_back"] };
+    expect(decideKey(ev("ArrowRight", { repeat: true }), DEFAULT_BINDINGS, opts)).toEqual({ type: "action", action: "step_forward" });
+    expect(decideKey(ev("ArrowLeft", { repeat: true }), DEFAULT_BINDINGS, opts)).toEqual({ type: "action", action: "step_back" });
+    expect(decideKey(ev("KeyF", { repeat: true }), DEFAULT_BINDINGS, opts)).toEqual({ type: "swallow" });
+    expect(decideKey(ev("KeyZ", { repeat: true }), DEFAULT_BINDINGS, opts)).toEqual({ type: "swallow" });
+  });
   it("ignores while typing in inputs", () => {
     expect(decideKey(ev("KeyF", { target: { tagName: "INPUT" } }), DEFAULT_BINDINGS, { capturing: false })).toEqual({ type: "ignore" });
     expect(decideKey(ev("KeyF", { target: { tagName: "DIV", isContentEditable: true } }), DEFAULT_BINDINGS, { capturing: false })).toEqual({ type: "ignore" });

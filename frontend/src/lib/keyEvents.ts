@@ -23,13 +23,13 @@ export type KeyDecision =
 export function decideKey(
   e: KeyEventLike,
   bindings: Record<string, string>,
-  opts: { capturing: boolean },
+  opts: { capturing: boolean; /** actions that keep firing while the key is held (e.g. frame stepping) */ repeatable?: readonly string[] },
 ): KeyDecision {
   if (opts.capturing || isTypingTarget(e.target)) return { type: "ignore" };
   if (e.ctrlKey || e.altKey || e.metaKey) return { type: "ignore" };
   const action = Object.keys(bindings).find((a) => bindings[a] === e.code);
   if (!action) return { type: "ignore" };
-  if (e.repeat) return { type: "swallow" };
+  if (e.repeat && !opts.repeatable?.includes(action)) return { type: "swallow" }; // a held counting key counts once
   return { type: "action", action };
 }
 

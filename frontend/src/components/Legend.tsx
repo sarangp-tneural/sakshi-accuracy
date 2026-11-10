@@ -8,7 +8,7 @@ const KEY = "sv_legend_open";
 // Compact wording for the legend only; Settings keeps the full registry labels.
 const SHORT: Record<string, string> = {
   in_unknown: "IN (any)", out_unknown: "OUT (any)", play_pause: "Play/pause", undo: "Undo", jump_back: "Back 3 s",
-  speed_1: "Speed 1x", speed_2: "Speed 2x", speed_3: "Speed 3x", speed_4: "Speed 4x", step_back: "Frame back", step_forward: "Frame fwd",
+  speed_1: "Speed 1x", speed_2: "Speed 2x", speed_3: "Speed 3x", speed_4: "Speed 4x", step_back: "Step back", step_forward: "Step fwd",
 };
 
 function read(): boolean { try { return localStorage.getItem(KEY) !== "0"; } catch { return true; } }

@@ -64,3 +64,38 @@ def test_sakshi_and_comparison_and_export(client, auth, video):
     # download links use ?token=
     tok = auth["Authorization"][7:]
     assert client.get(f"/api/videos/{video}/export.csv?token={tok}").status_code == 200
+
+
+def test_point_set_replace_clear(client, auth, video):
+    m = mk(client, auth, video).json()
+    assert m["x"] is None and m["y"] is None
+    r = client.put(f"/api/marks/{m['id']}/point", json={"x": 0.25, "y": 0.75}, headers=auth)
+    assert r.status_code == 200 and (r.json()["x"], r.json()["y"]) == (0.25, 0.75)
+    # survives a time nudge and appears in the list
+    client.patch(f"/api/marks/{m['id']}", json={"time_s": 4.0}, headers=auth)
+    got = client.get(f"/api/videos/{video}/marks", headers=auth).json()[0]
+    assert (got["x"], got["y"], got["time_s"]) == (0.25, 0.75, 4.0)
+    assert client.put(f"/api/marks/{m['id']}/point", json={"x": 1, "y": 0}, headers=auth).json()["x"] == 1
+    r = client.delete(f"/api/marks/{m['id']}/point", headers=auth)
+    assert r.status_code == 200 and r.json()["x"] is None and r.json()["y"] is None
+
+
+def test_point_validation_and_ownership(client, auth, video):
+    m = mk(client, auth, video).json()
+    for bad in ({"x": -0.1, "y": 0.5}, {"x": 0.5, "y": 1.01}, {"x": 0.5}, {"x": "a", "y": 0.5}):
+        assert client.put(f"/api/marks/{m['id']}/point", json=bad, headers=auth).status_code == 422
+    _, other = make_user("b@x.com")
+    assert client.put(f"/api/marks/{m['id']}/point", json={"x": 0.5, "y": 0.5}, headers=other).status_code == 404
+    assert client.delete(f"/api/marks/{m['id']}/point", headers=other).status_code == 404
+    assert client.get(f"/api/videos/{video}/marks", headers=auth).json()[0]["x"] is None
+
+
+def test_export_includes_point_columns(client, auth, video):
+    a = mk(client, auth, video, 1).json()
+    mk(client, auth, video, 2)
+    client.put(f"/api/marks/{a['id']}/point", json={"x": 0.1234567, "y": 0.5}, headers=auth)
+    text = client.get(f"/api/videos/{video}/export.csv", headers=auth).text
+    assert "id,time_s,direction,gender,x,y,created_at" in text
+    assert ",0.1235,0.5," in text
+    line2 = [ln for ln in text.splitlines() if ln.split(",")[1:2] == ["2.0"]][0]
+    assert line2.split(",")[4:6] == ["", ""]

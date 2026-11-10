@@ -63,6 +63,9 @@ class Mark(Base):
     gender: Mapped[str] = mapped_column(String(7))  # male | female | unknown
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    # where on the picture (normalised 0..1 of the video frame); both null or both set
+    x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y: Mapped[float | None] = mapped_column(Float, nullable=True)
     # extension point for later: person crop / box
     extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 

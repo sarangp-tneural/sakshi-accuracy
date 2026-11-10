@@ -25,6 +25,15 @@ cd frontend && npm test
 ## Where things are
 Projects → a project has two tabs: **Videos** (upload, RTSP, list) and **Settings** (shortcuts, reaction delay, sound, slow-after-jump). Settings belong to your account, so they apply to every project. On the Count screen the **⚙ Settings** button opens the same panel as a drawer without touching the video position.
 
+## Player (review-style controls)
+- **Timeline** (under the video): drag to scrub, click a marker to select it, **Ctrl + wheel** zooms, **Shift + wheel** pans, `− + ⤢` buttons. IN markers on the upper row, OUT on the lower; the ring colour is the gender; a diamond means the mark has a point.
+- **Picture zoom:** Ctrl + wheel on the video (up to 8x), drag to pan, **Reset** in the badge.
+- **Points:** on a mark use 📍 to pause on its frame, then click where the person is (Esc cancels). Points are saved with the mark (`x`, `y` as 0..1 of the picture), drawn on the video near the playhead, and exported to CSV/Excel. Toggle with **📍 Points**.
+- **▶ on a mark** replays 2 s before to 2 s after. **go to 1:23** jumps to a time. Left/Right (and the step buttons) move as many frames as the playback speed: 1x = 1 frame, 2x = 2, 3x = 3, 4x = 4. After clicking the timeline the arrows work straight away, and holding a key keeps stepping (one seek at a time, so every shown frame is a real step). The step uses the measured frame gap and always lands on an exact frame.
+
+**Smooth frame stepping needs frequent keyframes.** New uploads and recordings get a playback copy with a keyframe about every second (a plain copy is kept only when the source already has that). For videos processed earlier, rebuild their playback copy once (originals are never touched):
+`uv run --project backend python scripts/reprocess_playback.py --all --dry-run` to see them, then without `--dry-run` (or pass video ids).
+
 ## Default keys (all changeable in Settings ⚙)
 Left hand = male, right hand = female; index = IN, middle = OUT.
 `F` male IN · `D` male OUT · `J` female IN · `K` female OUT · `G` IN (unknown) · `H` OUT (unknown) ·

@@ -8,20 +8,25 @@ import { decideKey, nextRepeat } from "../lib/keyEvents";
 import { markTime } from "../lib/reaction";
 import { nearestIndex } from "../lib/nearest";
 import { shouldRefocus, useShortcutsPaused } from "../lib/useShortcutState";
+import { useTick } from "../lib/useTick";
 import { Button, LoadError, Spinner } from "../components/ui/bits";
 import { useToast } from "../components/ui/Toast";
 import Popup, { type PopupHandle } from "../components/Popup";
 import Counters, { type CountersHandle } from "../components/Counters";
 import ControllerBar from "../components/ControllerBar";
+import VideoViewport, { type PointMark, type ViewportHandle } from "../components/VideoViewport";
+import type { TimelineMark } from "../components/Timeline";
 import Legend from "../components/Legend";
 import MarksList, { type MarkPatch } from "../components/MarksList";
 import SakshiComparison from "../components/Comparison";
+import GoToTime from "../components/GoToTime";
 import SettingsDrawer from "../components/SettingsDrawer";
 import ExportDialog from "../components/ExportDialog";
 
 type LocalMark = Mark & { pending?: boolean };
 let tempId = -1;
 const NEAR_WINDOW_S = 3;
+const HOLD_TO_REPEAT = ["step_back", "step_forward"]; // holding these keeps stepping; counting keys count once per press
 
 function beep() {
   try {
@@ -49,8 +54,13 @@ export default function Count() {
   const [playing, setPlaying] = useState(false);
   const [version, setVersion] = useState(0);
   const [nearestId, setNearestId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [pickFor, setPickFor] = useState<number | null>(null);
+  const [showPoints, setShowPoints] = useState(() => { try { return localStorage.getItem("sv_points") !== "0"; } catch { return true; } });
   const vref = useRef<HTMLVideoElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const viewport = useRef<ViewportHandle>(null);
+  const stopAt = useRef<number | null>(null);
   const popup = useRef<PopupHandle>(null);
   const counters = useRef<CountersHandle>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -117,7 +127,7 @@ export default function Count() {
     popup.current?.show({ kind: def.direction, text: def.popup, gender: def.gender, times: lastRepeat.current.n });
     counters.current?.flash([def.direction, ...(def.gender !== "unknown" ? [def.gender] : []), "total"]);
     if (S.current.sound_enabled) beep();
-    const tmp: LocalMark = { id: tempId--, video_id: id, time_s: t, direction: def.direction, gender: def.gender, pending: true };
+    const tmp: LocalMark = { id: tempId--, video_id: id, time_s: t, direction: def.direction, gender: def.gender, x: null, y: null, pending: true };
     setMarks((m) => [...m, tmp]);
     enqueue(async () => {
       try {
@@ -158,18 +168,14 @@ export default function Count() {
   }, []);
 
   const togglePlay = useCallback(() => { const v = vref.current; if (!v) return; if (v.paused) void v.play(); else v.pause(); }, []);
-  const fps = video?.fps;
-  const step = useCallback((dir: 1 | -1) => {
-    const v = vref.current; if (!v) return;
-    v.pause();
-    const frame = 1 / (fps || 30);
-    v.currentTime = Math.min(Math.max(0, v.currentTime + dir * frame), v.duration || Infinity);
-  }, [fps]);
+  // frame step lives in the viewport: it knows the measured frame gap (variable frame rate) and snaps to frame centres
+  // Left/Right (and the step buttons) move as many frames as the playback speed: 1x = 1 frame, 4x = 4 frames
+  const step = useCallback((dir: 1 | -1) => viewport.current?.step(dir, Math.max(1, Math.round(vref.current?.playbackRate ?? 1))), []);
 
   // single global key handler; reads current bindings from the ref so rebinding applies immediately
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const d = decideKey(e, S.current.key_bindings, { capturing: capture.active });
+      const d = decideKey(e, S.current.key_bindings, { capturing: capture.active, repeatable: HOLD_TO_REPEAT });
       if (d.type === "ignore") return;
       e.preventDefault();
       if (d.type === "swallow") return;
@@ -214,8 +220,56 @@ export default function Count() {
     });
   }, [enqueue, toast, id]);
 
-  const seekTo = useCallback((m: LocalMark) => { if (vref.current) vref.current.currentTime = m.time_s; }, []);
-  const tickMarks = useMemo(() => marks.map((m) => ({ time_s: m.time_s, direction: m.direction })), [marks]);
+  const seekTo = useCallback((m: LocalMark) => { setSelectedId(m.id); if (vref.current) vref.current.currentTime = m.time_s; }, []);
+  const timelineMarks = useMemo<TimelineMark[]>(() => byTime.map((m) => ({ id: m.id, time_s: m.time_s, direction: m.direction, gender: m.gender, hasPoint: m.x !== null && m.y !== null })), [byTime]);
+  const pointMarks = useMemo<PointMark[]>(() => byTime.filter((m) => m.x !== null && m.y !== null).map((m) => ({ id: m.id, time_s: m.time_s, direction: m.direction, gender: m.gender, x: m.x!, y: m.y! })), [byTime]);
+
+  // ---- points: pause on the mark's frame, click the picture ----
+  const startPick = useCallback((m: LocalMark) => {
+    if (m.id < 0) return;
+    const v = vref.current; if (!v) return;
+    v.pause(); stopAt.current = null; v.currentTime = m.time_s;
+    setSelectedId(m.id); setPickFor(m.id);
+    setTimeout(focusStage, 0);
+  }, [focusStage]);
+  useEffect(() => {
+    if (pickFor === null) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setPickFor(null); setTimeout(focusStage, 0); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pickFor, focusStage]);
+  const placePoint = useCallback((x: number, y: number) => {
+    const id0 = pickFor; setPickFor(null);
+    setTimeout(focusStage, 0);
+    if (id0 === null) return;
+    const prev = marks.find((m) => m.id === id0);
+    setMarks((cur) => cur.map((m) => (m.id === id0 ? { ...m, x, y } : m)));
+    enqueue(async () => {
+      try { const saved = await api.setPoint(id0, x, y); setMarks((cur) => cur.map((m) => (m.id === id0 ? saved : m))); toast.success("Point placed"); }
+      catch (e) { setMarks((cur) => cur.map((m) => (m.id === id0 ? { ...m, x: prev?.x ?? null, y: prev?.y ?? null } : m))); throw e; }
+    });
+  }, [pickFor, marks, enqueue, toast, focusStage]);
+  const clearPoint = useCallback((m: LocalMark) => {
+    if (m.id < 0) return;
+    const { x, y } = m;
+    setMarks((cur) => cur.map((k) => (k.id === m.id ? { ...k, x: null, y: null } : k)));
+    enqueue(async () => {
+      try { await api.clearPoint(m.id); } catch (e) { setMarks((cur) => cur.map((k) => (k.id === m.id ? { ...k, x, y } : k))); throw e; }
+    });
+  }, [enqueue]);
+
+  // ---- replay a mark: play from 2 s before to 2 s after, then pause ----
+  const replay = useCallback((m: LocalMark) => {
+    const v = vref.current; if (!v) return;
+    setSelectedId(m.id);
+    v.currentTime = Math.max(0, m.time_s - 2);
+    stopAt.current = m.time_s + 2;
+    void v.play();
+  }, []);
+  useTick(() => {
+    const v = vref.current;
+    if (v && stopAt.current !== null && v.currentTime >= stopAt.current) { stopAt.current = null; v.pause(); }
+  }, 50);
   const refocus = (e: React.SyntheticEvent) => { if (shouldRefocus(e.target)) setTimeout(focusStage, 0); };
 
   if (load === "loading") return <main className="page"><Spinner /> Loading video…</main>;
@@ -236,17 +290,22 @@ export default function Count() {
             <span className={`kbd-state ${paused ? "off" : "on"}`} role="status">
               {paused ? "⏸ Shortcuts paused — click the video to resume" : "⌨ Shortcuts on"}
             </span>
+            <GoToTime videoRef={vref} duration={duration} onDone={focusStage} />
             <Button size="sm" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)} title="Click sound">{settings.sound_enabled ? "🔊" : "🔇"} Sound</Button>
+            <Button size="sm" aria-pressed={showPoints} title="Show points on the video"
+              onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>📍 Points</Button>
             <a className="btn sm" href="#result">↓ Result</a>
             <Button size="sm" onClick={() => setShowSettings(true)}>⚙ Settings</Button>
           </div>
-          <div className="stage" ref={stage} tabIndex={-1} aria-label="Video player">
-            <video ref={vref} src={streamUrl(id)} preload="auto" playsInline
-              onLoadedMetadata={(e) => { if (e.currentTarget.duration) setDuration(e.currentTarget.duration); }}
-              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onClick={togglePlay} />
+          <VideoViewport ref={viewport} videoRef={vref} stageRef={stage} src={streamUrl(id)} fps={video.fps}
+            points={pointMarks} selectedId={selectedId} showPoints={showPoints} pickMode={pickFor !== null}
+            onPick={placePoint} onToggle={togglePlay}
+            onLoadedMetadata={(v) => { if (v.duration) setDuration(v.duration); }}
+            onPlay={() => setPlaying(true)} onPause={() => { stopAt.current = null; setPlaying(false); }}>
             <Popup ref={popup} />
-          </div>
-          <ControllerBar videoRef={vref} duration={duration} playing={playing} rate={rate} marks={tickMarks}
+          </VideoViewport>
+          <ControllerBar videoRef={vref} duration={duration} playing={playing} rate={rate} marks={timelineMarks}
+            selectedId={selectedId} onSelect={setSelectedId}
             onTogglePlay={togglePlay} onStep={step} onJumpBack={jumpBack} onSetSpeed={setSpeed} />
         </div>
 
@@ -254,7 +313,8 @@ export default function Count() {
           <Counters ref={counters} counts={counts} />
           <section className="card marks">
             <h3>Marks ({marks.length}) <span className="small muted">newest first</span></h3>
-            <MarksList marks={marks} currentId={nearestId} onSeek={seekTo} onPatch={patchMark} onDelete={removeMark} onDone={focusStage} />
+            <MarksList marks={marks} currentId={nearestId} selectedId={selectedId} pickingId={pickFor}
+              onSeek={seekTo} onPatch={patchMark} onDelete={removeMark} onPlacePoint={startPick} onClearPoint={clearPoint} onReplay={replay} onDone={focusStage} />
           </section>
           <Legend bindings={settings.key_bindings} />
         </aside>

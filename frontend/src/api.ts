@@ -39,7 +39,8 @@ export interface Video {
   status_reason: string | null; duration_s: number | null; fps: number | null;
   rtsp_url_masked: string | null; rtsp_minutes: number | null; created_at: string;
 }
-export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown" }
+export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number | null; y: number | null }
+export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
 export interface Sakshi { in_count: number | null; out_count: number | null; male_count: number | null; female_count: number | null }
 export interface UserSettings { reaction_delay_s: number; sound_enabled: boolean; slow_after_jump: boolean; key_bindings: Bindings }
 
@@ -58,8 +59,10 @@ export const api = {
   stopRecording: (id: number) => req<Video>(`/videos/${id}/stop`, { method: "POST" }),
   deleteVideo: (id: number) => req<void>(`/videos/${id}`, { method: "DELETE" }),
   marks: (vid: number) => req<Mark[]>(`/videos/${vid}/marks`),
-  addMark: (vid: number, m: Omit<Mark, "id" | "video_id">) => req<Mark>(`/videos/${vid}/marks`, { method: "POST", body: body(m) }),
-  patchMark: (id: number, m: Partial<Omit<Mark, "id" | "video_id">>) => req<Mark>(`/marks/${id}`, { method: "PATCH", body: body(m) }),
+  addMark: (vid: number, m: MarkFields) => req<Mark>(`/videos/${vid}/marks`, { method: "POST", body: body(m) }),
+  patchMark: (id: number, m: Partial<MarkFields>) => req<Mark>(`/marks/${id}`, { method: "PATCH", body: body(m) }),
+  setPoint: (id: number, x: number, y: number) => req<Mark>(`/marks/${id}/point`, { method: "PUT", body: body({ x, y }) }),
+  clearPoint: (id: number) => req<Mark>(`/marks/${id}/point`, { method: "DELETE" }),
   deleteMark: (id: number) => req<void>(`/marks/${id}`, { method: "DELETE" }),
   undo: (vid: number) => req<Mark>(`/videos/${vid}/marks/last`, { method: "DELETE" }),
   sakshi: (vid: number) => req<Sakshi>(`/videos/${vid}/sakshi`),

@@ -65,6 +65,11 @@ class MarkPatch(BaseModel):
     gender: Gender | None = None
 
 
+class PointIn(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
 class MarkOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -72,6 +77,8 @@ class MarkOut(BaseModel):
     time_s: float
     direction: str
     gender: str
+    x: float | None = None
+    y: float | None = None
     created_at: datetime
 
 
