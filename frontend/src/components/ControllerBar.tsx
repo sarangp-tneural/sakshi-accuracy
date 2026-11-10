@@ -9,6 +9,8 @@ interface Props {
   duration: number;
   playing: boolean;
   rate: number;
+  muted: boolean;
+  onToggleMute: () => void;
   marks: TimelineMark[];
   selectedId: number | null;
   onSelect: (id: number) => void;
@@ -18,7 +20,7 @@ interface Props {
   onSetSpeed: (r: number) => void;
 }
 
-function ControllerBar({ videoRef, duration, playing, rate, marks, selectedId, onSelect, onTogglePlay, onStep, onJumpBack, onSetSpeed }: Props) {
+function ControllerBar({ videoRef, duration, playing, rate, muted, onToggleMute, marks, selectedId, onSelect, onTogglePlay, onStep, onJumpBack, onSetSpeed }: Props) {
   const timeEl = useRef<HTMLSpanElement>(null);
   const last = useRef("");
   useTick(() => {
@@ -38,6 +40,7 @@ function ControllerBar({ videoRef, duration, playing, rate, marks, selectedId, o
       <Button size="icon" onClick={() => onStep(1)} aria-label={`Step ${frames} forward`} title={`Forward ${frames} (as many as the speed)`}>⏭</Button>
       <Button onClick={onJumpBack} title="Jump back 3 seconds">↺ 3s</Button>
       <span className="time num" aria-label="Current time"><span ref={timeEl}>00:00.0</span> / {fmtTime(duration)}</span>
+      <Button aria-pressed={muted} onClick={onToggleMute} aria-label={muted ? "Unmute video" : "Mute video"} title={muted ? "Video is muted: click to unmute" : "Mute the video's audio"}>{muted ? "🔇 Muted" : "🔊 Audio"}</Button>
       <span className="spacer" />
       <div className="speeds" role="group" aria-label="Playback speed">
         {[1, 2, 3, 4].map((r) => <Button key={r} aria-pressed={rate === r} onClick={() => onSetSpeed(r)}>{r}x</Button>)}

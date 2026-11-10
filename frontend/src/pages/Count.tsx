@@ -59,6 +59,8 @@ export default function Count() {
   const [showPoints, setShowPoints] = useState(() => { try { return localStorage.getItem("sv_points") !== "0"; } catch { return true; } });
   const vref = useRef<HTMLVideoElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem("sv_video_muted") === "1"; } catch { return false; } });
+  const toggleMute = useCallback(() => setMuted((m) => { try { localStorage.setItem("sv_video_muted", m ? "0" : "1"); } catch { /* ignore */ } return !m; }), []);
   const viewport = useRef<ViewportHandle>(null);
   const stopAt = useRef<number | null>(null);
   const popup = useRef<PopupHandle>(null);
@@ -291,20 +293,20 @@ export default function Count() {
               {paused ? "⏸ Shortcuts paused — click the video to resume" : "⌨ Shortcuts on"}
             </span>
             <GoToTime videoRef={vref} duration={duration} onDone={focusStage} />
-            <Button size="sm" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)} title="Click sound">{settings.sound_enabled ? "🔊" : "🔇"} Sound</Button>
+            <Button size="sm" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)} title="Beep on each mark (not the video audio)">{settings.sound_enabled ? "🔔" : "🔕"} Click sound</Button>
             <Button size="sm" aria-pressed={showPoints} title="Show points on the video"
               onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>📍 Points</Button>
             <a className="btn sm" href="#result">↓ Result</a>
             <Button size="sm" onClick={() => setShowSettings(true)}>⚙ Settings</Button>
           </div>
           <VideoViewport ref={viewport} videoRef={vref} stageRef={stage} src={streamUrl(id)} fps={video.fps}
-            points={pointMarks} selectedId={selectedId} showPoints={showPoints} pickMode={pickFor !== null}
+            points={pointMarks} selectedId={selectedId} showPoints={showPoints} muted={muted} pickMode={pickFor !== null}
             onPick={placePoint} onToggle={togglePlay}
             onLoadedMetadata={(v) => { if (v.duration) setDuration(v.duration); }}
             onPlay={() => setPlaying(true)} onPause={() => { stopAt.current = null; setPlaying(false); }}>
             <Popup ref={popup} />
           </VideoViewport>
-          <ControllerBar videoRef={vref} duration={duration} playing={playing} rate={rate} marks={timelineMarks}
+          <ControllerBar videoRef={vref} duration={duration} playing={playing} rate={rate} muted={muted} onToggleMute={toggleMute} marks={timelineMarks}
             selectedId={selectedId} onSelect={setSelectedId}
             onTogglePlay={togglePlay} onStep={step} onJumpBack={jumpBack} onSetSpeed={setSpeed} />
         </div>

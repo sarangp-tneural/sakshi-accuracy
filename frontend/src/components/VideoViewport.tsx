@@ -17,6 +17,7 @@ interface Props {
   points: PointMark[]; // marks that have a point, ascending by time
   selectedId: number | null;
   showPoints: boolean;
+  muted: boolean;
   pickMode: boolean;
   onPick: (x: number, y: number) => void;
   onToggle: () => void; // plain click on the picture: play / pause
@@ -31,7 +32,7 @@ const DRAG_PX = 4;
 
 /** The stage: video (zoom 1x-8x with Ctrl+wheel, drag to pan), crisp overlay for points, click-to-pick, frame stepping. */
 const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
-  { videoRef, stageRef, src, fps, points, selectedId, showPoints, pickMode, onPick, onToggle, onLoadedMetadata, onPlay, onPause, children }, handle) {
+  { videoRef, stageRef, src, fps, points, selectedId, showPoints, muted, pickMode, onPick, onToggle, onLoadedMetadata, onPlay, onPause, children }, handle) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [tr, setTr] = useState<Transform>(IDENTITY);
   const trRef = useRef(tr); trRef.current = tr;
@@ -207,7 +208,7 @@ const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
     <div className={`stage ${pickMode ? "picking" : tr.scale > 1 ? "zoomed" : ""}`} ref={stageRef} tabIndex={-1} aria-label="Video player"
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; }}>
       <div className="vlayer" style={{ transform: `translate(${tr.tx}px, ${tr.ty}px) scale(${tr.scale})` }}>
-        <video ref={videoRef} src={src} preload="auto" playsInline
+        <video ref={videoRef} src={src} preload="auto" playsInline muted={muted}
           onLoadedMetadata={(e) => { onLoadedMetadata(e.currentTarget); dirty.current = true; }} onSeeked={finishSeek} onPlay={onPlay} onPause={onPause} />
       </div>
       <canvas ref={canvas} className="overlay" aria-hidden />
