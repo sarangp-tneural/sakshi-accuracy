@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { DIRECTION_META, GENDER_META, type Direction, type Gender } from "../../lib/semantic";
 import { keyLabel } from "../../keys/registry";
 
@@ -38,5 +39,21 @@ export function LoadError({ message, onRetry }: { message: string; onRetry?: () 
     <div className="alert" role="alert">
       {message} {onRetry && <Button size="sm" onClick={onRetry}>Retry</Button>}
     </div>
+  );
+}
+
+/** Breadcrumb: links for the path, the last item is the current page (not a link). Long names are shortened with an ellipsis. */
+export function Crumbs({ items }: { items: { label: string; to?: string; icon?: string }[] }) {
+  return (
+    <nav className="crumbs" aria-label="Breadcrumb">
+      {items.map((it, i) => (
+        <span className="crumb" key={i}>
+          {i > 0 && <span className="sep" aria-hidden>›</span>}
+          {it.to
+            ? <Link to={it.to} title={it.label}>{it.icon && <span aria-hidden>{it.icon} </span>}{it.label}</Link>
+            : <span className="here" aria-current="page" title={it.label}>{it.label}</span>}
+        </span>
+      ))}
+    </nav>
   );
 }

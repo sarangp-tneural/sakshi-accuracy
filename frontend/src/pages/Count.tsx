@@ -6,10 +6,11 @@ import { COUNT_ACTIONS, SPEEDS } from "../keys/registry";
 import { capture } from "../keys/capture";
 import { decideKey, nextRepeat } from "../lib/keyEvents";
 import { markTime } from "../lib/reaction";
+import { fmtTime } from "../lib/format";
 import { nearestIndex } from "../lib/nearest";
 import { shouldRefocus, useShortcutsPaused } from "../lib/useShortcutState";
 import { useTick } from "../lib/useTick";
-import { Button, LoadError, Spinner } from "../components/ui/bits";
+import { Button, Crumbs, LoadError, Spinner } from "../components/ui/bits";
 import { useToast } from "../components/ui/Toast";
 import Popup, { type PopupHandle } from "../components/Popup";
 import Counters, { type CountersHandle } from "../components/Counters";
@@ -283,22 +284,36 @@ export default function Count() {
     <div className="count-wrap">
       <div className="count-screen" onClick={refocus} onPointerUp={refocus}>
         <div className="stage-col">
-          <div className="count-head">
-            <nav className="crumbs" aria-label="Breadcrumb">
-              <Link to="/">Projects</Link>/<Link to={`/projects/${video.project_id}`}>{projectName || "Project"}</Link>/<b>{video.name}</b>
-            </nav>
-            {video.status === "partial" && <span className="badge partial" title={video.status_reason ?? ""}>partial recording</span>}
-            <span className="spacer" />
-            <span className={`kbd-state ${paused ? "off" : "on"}`} role="status">
-              {paused ? "⏸ Shortcuts paused — click the video to resume" : "⌨ Shortcuts on"}
-            </span>
-            <GoToTime videoRef={vref} duration={duration} onDone={focusStage} />
-            <Button size="sm" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)} title="Beep on each mark (not the video audio)">{settings.sound_enabled ? "🔔" : "🔕"} Click sound</Button>
-            <Button size="sm" aria-pressed={showPoints} title="Show points on the video"
-              onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>📍 Points</Button>
-            <a className="btn sm" href="#result">↓ Result</a>
-            <Button size="sm" onClick={() => setShowSettings(true)}>⚙ Settings</Button>
-          </div>
+          <header className="count-head">
+            <div className="head-id">
+              <Crumbs items={[
+                { label: "Projects", to: "/", icon: "⌂" },
+                { label: projectName || "Project", to: `/projects/${video.project_id}` },
+                { label: video.name },
+              ]} />
+              <span className="vmeta">
+                {duration > 0 && <span className="num">{fmtTime(duration)}</span>}
+                <span>{video.source === "rtsp" ? "RTSP recording" : "upload"}</span>
+                {video.status === "partial" && <span className="badge partial" title={video.status_reason ?? ""}>partial recording</span>}
+              </span>
+            </div>
+            <div className="head-tools">
+              <span className={`kbd-state ${paused ? "off" : "on"}`} role="status"
+                title={paused ? "Single-key shortcuts are paused while you type or rebind. Click the video to resume." : "Counting keys are active"}>
+                {paused ? "⏸ Shortcuts paused" : "⌨ Shortcuts on"}
+              </span>
+              <GoToTime videoRef={vref} duration={duration} onDone={focusStage} />
+              <div className="tool-group" role="group" aria-label="Display and sound">
+                <Button size="sm" variant="ghost" aria-pressed={showPoints} title="Show points on the video"
+                  onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>
+                  <span aria-hidden>📍</span><span className="tl-label"> Points</span></Button>
+                <Button size="sm" variant="ghost" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)}
+                  title="Beep on each mark (not the video audio)"><span aria-hidden>{settings.sound_enabled ? "🔔" : "🔕"}</span><span className="tl-label"> Click sound</span></Button>
+              </div>
+              <a className="btn sm" href="#result" title="Sakshi result and comparison"><span aria-hidden>↓</span> Result</a>
+              <Button size="sm" onClick={() => setShowSettings(true)}><span aria-hidden>⚙</span> Settings</Button>
+            </div>
+          </header>
           <VideoViewport ref={viewport} videoRef={vref} stageRef={stage} src={streamUrl(id)} fps={video.fps}
             points={pointMarks} selectedId={selectedId} showPoints={showPoints} muted={muted} pickMode={pickFor !== null}
             onPick={placePoint} onToggle={togglePlay}

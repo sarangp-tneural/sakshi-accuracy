@@ -62,7 +62,14 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
   background: var(--surface); border-bottom: 1px solid var(--border); }
 .topbar a { color: var(--text); text-decoration: none; font-weight: 700; }
 .page { max-width: 1200px; margin: 0 auto; padding: var(--s-4) var(--s-4) 60px; display: flex; flex-direction: column; gap: var(--s-4); }
-.crumbs { font-size: var(--fs-sm); color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.crumbs { font-size: var(--fs-sm); color: var(--muted); display: flex; gap: 2px; align-items: center; min-width: 0; flex-wrap: nowrap; }
+.crumb { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.crumb:not(:last-child) { flex-shrink: 0; } /* ancestors keep their size; the current (long) name shortens first */
+.crumb:last-child { min-width: 0; flex-shrink: 1; }
+.crumbs a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: var(--r-sm); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.crumbs a:hover { background: var(--surface-2); color: var(--text); }
+.crumbs .sep { opacity: .55; font-size: 16px; padding: 0 2px; }
+.crumbs .here { color: var(--text); font-weight: 700; font-size: var(--fs-md); padding: 4px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .tabs { display: flex; gap: var(--s-1); border-bottom: 1px solid var(--border); }
 .tabs a { padding: 8px 16px; text-decoration: none; color: var(--muted); font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -1px; }
 .tabs a.active { color: var(--text); border-bottom-color: var(--primary); }
