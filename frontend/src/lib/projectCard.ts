@@ -31,11 +31,12 @@ export function comparedPct(compared: number, videos: number): number {
   return Math.min(100, Math.round((compared / videos) * 100));
 }
 
-export interface StateBadge { key: "recording" | "processing" | "failed"; label: string; n: number }
+export interface StateBadge { key: "recording" | "connecting" | "processing" | "failed"; label: string; n: number }
 /** Only the states that need attention, in order of importance; empty when everything is idle. */
-export function stateBadges(p: Pick<Project, "recording_count" | "processing_count" | "failed_count">): StateBadge[] {
+export function stateBadges(p: Pick<Project, "recording_count" | "connecting_count" | "processing_count" | "failed_count">): StateBadge[] {
   const all: StateBadge[] = [
     { key: "recording", label: "Recording", n: p.recording_count },
+    { key: "connecting", label: "Attempting", n: p.connecting_count },
     { key: "processing", label: "Processing", n: p.processing_count },
     { key: "failed", label: "Failed", n: p.failed_count },
   ];

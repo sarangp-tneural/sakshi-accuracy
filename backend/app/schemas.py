@@ -25,6 +25,7 @@ class ProjectOut(BaseModel):
     # filled in by the list endpoint (zeros for a project that was just created)
     video_count: int = 0
     recording_count: int = 0
+    connecting_count: int = 0  # recordings still attempting to connect
     processing_count: int = 0
     failed_count: int = 0
     camera_count: int = 0
@@ -96,8 +97,11 @@ class CameraOut(BaseModel):
     default_minutes: int
     created_at: datetime
     last_recorded_at: datetime | None = None
-    recording_video_id: int | None = None  # the recording in progress, if any
+    recording_video_id: int | None = None  # the recording (or attempt) in progress, if any
+    recording_status: str | None = None  # "connecting" (attempting) or "recording"
+    recording_note: str | None = None  # while attempting: the latest try and why it failed
     recording_started_at: datetime | None = None
+    recording_created_at: datetime | None = None
     recording_minutes: int | None = None
 
 

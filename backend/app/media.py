@@ -29,7 +29,7 @@ def probe_keyframe_gap(path: Path) -> float | None:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0", "-read_intervals", f"%+#{KEYFRAME_SAMPLE_PACKETS}",
              "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", str(path)],
-            capture_output=True, text=True, timeout=60, check=True,
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, check=True,
         ).stdout
     except (subprocess.SubprocessError, OSError):
         return None
@@ -47,7 +47,7 @@ def probe(path: Path) -> dict:
     """Return {duration_s, fps, vcodec, width, height, container, max_keyframe_gap_s} via ffprobe."""
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
-        capture_output=True, text=True, timeout=60, check=True,
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, check=True,
     ).stdout
     data = json.loads(out)
     v = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), None)
@@ -79,14 +79,33 @@ def build_playback_cmd(src: Path, dest: Path, info: dict) -> list[str]:
     remux_ok = (info.get("vcodec") == "h264" and "mp4" in info.get("container", "") and src.suffix.lower() == ".mp4"
                 and gap is not None and gap <= MAX_KEYFRAME_GAP_S)
     if remux_ok:
-        return ["ffmpeg", "-y", "-i", str(src), "-c", "copy", "-movflags", "+faststart", str(dest)]
+        return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c", "copy", "-movflags", "+faststart", str(dest)]
     gop = str(max(1, round(info.get("fps") or 25)))
-    return ["ffmpeg", "-y", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+    return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-g", gop, "-keyint_min", gop, "-sc_threshold", "0",
             "-c:a", "aac", "-movflags", "+faststart", str(dest)]
 
 
-def make_playback(src: Path, dest: Path, info: dict) -> None:
-    r = subprocess.run(build_playback_cmd(src, dest, info), capture_output=True, text=True)
+def playback_timeout_s(duration_s: float | None) -> float:
+    """How long the playable copy may take: generous (even at half real-time speed) but never unbounded."""
+    return 600 + 2 * max(0.0, duration_s or 0.0)
+
+
+def quick_copy_cmd(src: Path, dest: Path) -> list[str]:
+    return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c", "copy", "-movflags", "+faststart", str(dest)]
+
+
+def make_playback(src: Path, dest: Path, info: dict, run=subprocess.run) -> str:
+    """Create the playable copy. Returns how: "ready" (as planned) or "copied" (the conversion was too slow, so a quick copy
+    was made instead: watchable, but frame stepping may be slower). Never reads the terminal and never hangs."""
+    cmd = build_playback_cmd(src, dest, info)
+    try:
+        r = run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=playback_timeout_s(info.get("duration_s")))
+    except subprocess.TimeoutExpired:
+        r = run(quick_copy_cmd(src, dest), stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError("The conversion took too long and a quick copy was not possible: " + (r.stderr or "")[-300:])
+        return "copied"
     if r.returncode != 0:
         raise RuntimeError(r.stderr[-500:])
+    return "ready"

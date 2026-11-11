@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app import control, media, rtsp, worker
@@ -47,7 +48,7 @@ def make_recording(tmp_path):
         db.flush()
         out = tmp_path / "rec" / "original.mp4"
         out.parent.mkdir(parents=True)
-        v = Video(project_id=pr.id, name="cam", source="rtsp", status="recording", rtsp_url_enc=rtsp.encrypt_url(URL),
+        v = Video(project_id=pr.id, name="cam", source="rtsp", status="connecting", rtsp_url_enc=rtsp.encrypt_url(URL),
                   rtsp_url_masked=rtsp.mask_url(URL), rtsp_minutes=5, file_path=str(out))
         db.add(v)
         db.commit()
@@ -58,10 +59,14 @@ def run_worker(monkeypatch, tmp_path, result, write=True):
     make_user()
     vid, out = make_recording(tmp_path)
 
-    def fake_run(url, minutes, path, should_stop=None, **kw):
+    started = datetime(2026, 11, 10, 12, 0, 40, tzinfo=timezone.utc)
+
+    def fake_run(url, minutes, path, should_stop=None, on_attempt=None, on_connected=None, **kw):
+        on_attempt(1, "")
         if write:
             path.write_bytes(b"x" * 2048)
-        return result
+            on_connected(started)  # video arrived: this is the recording's start
+        return {"started_at": started if write else None, "ended_at": started + timedelta(seconds=result.get("elapsed", 0)), **result}
 
     monkeypatch.setattr(rtsp, "run_recording", fake_run)
     monkeypatch.setattr(media, "probe", lambda p: {"duration_s": 61.5, "fps": 25.0, "vcodec": "h264", "width": 1920, "height": 1080,
@@ -77,7 +82,8 @@ def run_worker(monkeypatch, tmp_path, result, write=True):
 def test_recording_stores_start_end_size_and_stream_details(monkeypatch, tmp_path):
     v = run_worker(monkeypatch, tmp_path, {"status": "saved", "reason": None, "elapsed": 300})
     assert v.status == "ready"
-    assert v.started_at is not None and v.ended_at is not None and v.ended_at >= v.started_at
+    assert v.started_at == datetime(2026, 11, 10, 12, 0, 40, tzinfo=timezone.utc)  # when video arrived, not when it was requested
+    assert v.ended_at == v.started_at + timedelta(seconds=300)
     assert v.file_size == 2048
     assert (v.width, v.height, v.vcodec, v.duration_s, v.fps) == (1920, 1080, "h264", 61.5, 25.0)
 
@@ -93,9 +99,10 @@ def test_partial_recording_is_marked_partial_with_times(monkeypatch, tmp_path):
     assert v.status == "partial" and "dropped" in v.status_reason and v.ended_at
 
 
-def test_failed_recording_still_gets_an_end_time(monkeypatch, tmp_path):
+def test_failed_attempt_has_no_start_time_but_an_end_time(monkeypatch, tmp_path):
     v = run_worker(monkeypatch, tmp_path, {"status": "failed", "reason": "Could not record the stream.", "elapsed": 2}, write=False)
-    assert v.status == "failed" and v.started_at and v.ended_at and v.file_size is None
+    assert v.status == "failed" and v.file_size is None
+    assert v.started_at is None and v.ended_at is not None  # the camera never connected: no start time, but the attempt has an end
 
 
 def test_probe_reports_resolution_on_a_real_clip(tmp_path):

@@ -51,6 +51,44 @@ describe("videoDetails: uploads", () => {
   });
 });
 
+describe("videoDetails: attempting and never-started recordings", () => {
+  const attempting = (o: Partial<Video> = {}): Video => rtsp({ status: "connecting", started_at: null, ended_at: null, duration_s: null, file_size: null, width: null, height: null, vcodec: null,
+    created_at: "2026-11-10T12:00:00Z", status_reason: "Attempt 3 · The camera refused the connection.", ...o });
+  const now = new Date("2026-11-10T12:01:05Z").getTime();
+  it("an attempting row shows how long, which try, and the latest reason; no start time yet", () => {
+    const d = videoDetails(attempting(), now);
+    expect(get(d, "Recording started")).toMatchObject({ value: "not yet: still attempting to connect", tone: "muted" });
+    expect(get(d, "Attempting for")?.value).toBe("01:05");
+    expect(get(d, "Attempt")?.value).toBe("try 3");
+    expect(get(d, "Latest attempt")).toMatchObject({ value: "The camera refused the connection.", wide: true, tone: "warn" });
+    expect(get(d, "Recorded so far")).toBeUndefined();
+    expect(get(d, "Why it failed")).toBeUndefined();
+  });
+  it("an attempt nobody picked up says the recorder is not working on it", () => {
+    const d = videoDetails(attempting({ status_reason: null }), now);
+    expect(get(d, "Attempt")).toMatchObject({ value: "waiting for the recorder…", tone: "warn" });
+    expect(get(videoDetails(attempting({ status_reason: null }), new Date("2026-11-10T12:00:05Z").getTime()), "Attempt")?.value).toBe("starting…");
+  });
+  it("a failed attempt that never connected shows no start, when attempts ended, and how long it tried", () => {
+    const d = videoDetails(rtsp({ status: "failed", started_at: null, ended_at: "2026-11-10T12:05:00Z", created_at: "2026-11-10T12:00:00Z", duration_s: null, file_size: null,
+      status_reason: "The camera did not come online within 5 min (15 attempts)." }), now);
+    expect(get(d, "Recording started")).toMatchObject({ value: "never started (the camera did not connect)", tone: "muted" });
+    expect(get(d, "Attempts ended")?.value).toBe(fmtDateTime("2026-11-10T12:05:00Z"));
+    expect(get(d, "Attempted for")?.value).toBe("05:00");
+    expect(get(d, "Recording ended")).toBeUndefined();
+    expect(get(d, "Why it failed")).toMatchObject({ tone: "bad" });
+    expect(get(d, "Recorded")).toBeUndefined();
+  });
+  it("a recording that began after a late connection shows its real start and the loss time as the end", () => {
+    const d = videoDetails(rtsp({ status: "partial", created_at: "2026-11-10T12:00:00Z", started_at: "2026-11-10T12:00:40Z", ended_at: "2026-11-10T12:03:10Z", duration_s: 150,
+      status_reason: "The camera stopped sending video at 12:03:10 (the connection was lost)." }), now);
+    expect(get(d, "Requested")?.value).toBe(fmtDateTime("2026-11-10T12:00:00Z"));
+    expect(get(d, "Recording started")?.value).toBe(fmtDateTime("2026-11-10T12:00:40Z"));
+    expect(get(d, "Recording ended")?.value).toBe(fmtDateTime("2026-11-10T12:03:10Z"));
+    expect(get(d, "Recorded")).toMatchObject({ value: "02:30 of 05:00 planned (ended early)", tone: "warn" });
+  });
+});
+
 describe("videoDetails: RTSP recordings", () => {
   it("a finished full recording shows start, end and recorded of planned", () => {
     const d = videoDetails(rtsp(), 0);
@@ -77,6 +115,10 @@ describe("videoDetails: RTSP recordings", () => {
     expect(get(d, "Recorded so far")?.value).toBe("01:30 of 05:00");
     expect(get(d, "Planned end")?.value).toBe(fmtDateTime("2026-11-10T12:05:00.000Z"));
     expect(get(d, "Recording ended")).toBeUndefined();
+  });
+  it("a recording that never started says the recorder is not picking it up", () => {
+    const d = videoDetails(rtsp({ status: "recording", started_at: null, ended_at: null, created_at: "2026-11-10T12:00:00Z" }), new Date("2026-11-10T12:05:00Z").getTime());
+    expect(get(d, "Recording started")).toMatchObject({ value: "waiting for the recorder…", tone: "warn" });
   });
   it("progress never exceeds the plan and a not-yet-started job says so", () => {
     const start = new Date("2026-11-10T12:00:00Z").getTime();

@@ -36,61 +36,13 @@ def test_cmd_duration():
     assert cmd[cmd.index("-t") + 1] == "180" and "copy" in cmd and URL in cmd
 
 
-class FakeProc:
-    def __init__(self, clock, ends_at, rc, err="", out=None, writes=True):
-        self.clock, self.ends_at, self.returncode_final, self.err = clock, ends_at, rc, err
-        self.returncode = None
-        self.killed = False
-        import io
-        self.stderr = io.StringIO(err)
-        if out is not None and writes:
-            out.write_bytes(b"data")
-
-    def poll(self):
-        if self.killed or self.clock.t >= self.ends_at:
-            self.returncode = -9 if self.killed else self.returncode_final
-            return self.returncode
-        return None
-
-    def kill(self):
-        self.killed = True
-
-
-class Clock:
-    t = 0.0
-
-    def __call__(self):
-        return self.t
-
-    def sleep(self, s):
-        self.t += s
-
-
-def run(tmp_path, ends_at, rc, minutes=1, err="", writes=True):
-    c = Clock()
-    out = tmp_path / "o.mp4"
-    res = rtsp.run_recording(URL, minutes, out, clock=c, sleep=c.sleep,
-                             popen=lambda cmd, **kw: FakeProc(c, ends_at, rc, err, out, writes))
-    return res
-
-
-def test_full_duration_saved(tmp_path):
-    assert run(tmp_path, 60, 0)["status"] == "saved"
-
-
-def test_stream_drop_is_partial(tmp_path):
-    r = run(tmp_path, 20, 1, err=f"error reading {URL}")
-    assert r["status"] == "partial" and "s3cret" not in r["reason"] and "20 s" in r["reason"]
-
-
-def test_no_file_is_failed(tmp_path):
-    r = run(tmp_path, 2, 1, err="Connection refused", writes=False)
-    assert r["status"] == "failed" and "Connection refused" in r["reason"]
-
-
-def test_hung_process_killed(tmp_path):
-    r = run(tmp_path, 10_000, 0)
-    assert r["status"] == "partial" and "stalled" in r["reason"]
+def test_preview_says_so_when_the_camera_is_unreachable():
+    class R:
+        returncode, stdout = 1, b""
+        stderr = f"Connection to tcp://10.0.0.5:554?timeout=8000000 failed: Connection timed out ({URL})".encode()
+    with pytest.raises(RuntimeError) as e:
+        rtsp.grab_frame(URL, run=lambda cmd, **kw: R())
+    assert "Could not reach the camera" in str(e.value) and "s3cret" not in str(e.value)
 
 
 def test_api_validation_and_no_secret_leak(client, auth, monkeypatch):
@@ -99,7 +51,7 @@ def test_api_validation_and_no_secret_leak(client, auth, monkeypatch):
     assert client.post(url, json={"url": "http://x", "minutes": 5}, headers=auth).status_code == 422
     assert client.post(url, json={"url": URL, "minutes": 999}, headers=auth).status_code == 422
     r = client.post(url, json={"url": URL, "minutes": 5}, headers=auth)
-    assert r.status_code == 201 and r.json()["status"] == "recording"
+    assert r.status_code == 201 and r.json()["status"] == "connecting"
     assert "s3cret" not in r.text and "admin" not in r.text
     monkeypatch.setattr(settings, "min_free_disk_bytes", 10**18)
     assert client.post(url, json={"url": URL, "minutes": 5}, headers=auth).status_code == 507
@@ -117,37 +69,6 @@ def test_upload_type_and_size(client, auth, monkeypatch):
 
 
 # ---- stop + preview ----
-class StoppableProc(FakeProc):
-    def send_signal(self, sig):
-        self.sigint = True
-        self.ends_at = 0  # ffmpeg finalizes and exits on SIGINT
-
-    def wait(self, timeout=None):
-        self.returncode = 255
-        return 255
-
-
-def test_manual_stop_keeps_file(tmp_path):
-    c = Clock()
-    out = tmp_path / "o.mp4"
-    procs = []
-
-    def popen(cmd, **kw):
-        p = StoppableProc(c, 10_000, 0, "", out)
-        procs.append(p)
-        return p
-
-    res = rtsp.run_recording(URL, 5, out, clock=c, sleep=c.sleep, popen=popen, should_stop=lambda: c.t >= 12)
-    assert res["status"] == "stopped" and "12 s" in res["reason"] and procs[0].sigint
-    assert out.exists()
-
-
-def test_manual_stop_without_file_is_failed(tmp_path):
-    c = Clock()
-    out = tmp_path / "o.mp4"
-    res = rtsp.run_recording(URL, 5, out, clock=c, sleep=c.sleep, should_stop=lambda: c.t >= 3,
-                             popen=lambda cmd, **kw: StoppableProc(c, 10_000, 0, "", out, writes=False))
-    assert res["status"] == "failed" and "Stopped" in res["reason"]
 
 
 def test_stop_endpoint(client, auth, monkeypatch):
@@ -199,3 +120,26 @@ def test_preview_endpoint(client, auth, monkeypatch):
     monkeypatch.setattr(rtsp, "grab_frame", fail)
     r = client.post(url, json={"url": URL}, headers=auth)
     assert r.status_code == 502 and "s3cret" not in r.text
+
+
+@pytest.mark.parametrize("err, expected", [
+    ("Connection to tcp://h:554?timeout=5000000 failed: Connection timed out", "Could not reach the camera"),
+    ("tcp failed: No route to host", "Could not reach the camera"),
+    ("Connection refused", "refused the connection"),
+    ("method DESCRIBE failed: 401 Unauthorized", "rejected the login"),
+    ("method DESCRIBE failed: 404 Not Found", "no stream at this address"),
+    ("Name or service not known", "address could not be found"),
+])
+def test_common_failures_get_a_plain_sentence(err, expected):
+    assert expected in rtsp.explain_failure(err)
+
+
+
+
+def test_unknown_failures_keep_the_raw_detail_and_never_the_password(tmp_path, monkeypatch):
+    from tests.fakes import DEAD, record
+    monkeypatch.setattr(settings, "rtsp_attempt_window_s", 20)
+    assert rtsp.explain_failure("something odd") is None
+    assert rtsp.explain_failure("") is None
+    res, *_ = record(tmp_path, [dict(DEAD, err=f"odd failure for {URL}")])
+    assert res["status"] == "failed" and "odd failure" in res["reason"] and "s3cret" not in res["reason"]

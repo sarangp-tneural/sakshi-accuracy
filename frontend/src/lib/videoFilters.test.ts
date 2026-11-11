@@ -23,6 +23,13 @@ describe("URL <-> filters", () => {
     expect(parse("status=failed&status=ready&status=ready").status).toEqual(["ready", "failed"]);
     expect(serializeFilters(f({ status: ["failed", "ready"] })).getAll("status")).toEqual(["ready", "failed"]);
   });
+  it("'connecting' (Attempting) is a valid status that round-trips and keeps its place in the order", () => {
+    const f1 = f({ status: ["failed", "connecting", "ready"] });
+    expect(serializeFilters(f1).getAll("status")).toEqual(["ready", "connecting", "failed"]);
+    expect(parse("status=connecting&status=recording").status).toEqual(["connecting", "recording"]);
+    expect(parseFilters(serializeFilters(f1)).status).toEqual(["ready", "connecting", "failed"]);
+    expect(toApiQuery(f({ status: ["connecting"] })).getAll("status")).toEqual(["connecting"]);
+  });
   it("invalid values fall back to defaults and never throw", () => {
     const p = parse("status=weird&source=ftp&progress=done&sort=difference&page=0&added=yesterday&from=nope&to=2026-02-31");
     expect(p).toEqual(DEFAULT_FILTERS);

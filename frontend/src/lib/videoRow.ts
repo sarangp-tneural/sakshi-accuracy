@@ -13,3 +13,37 @@ export function deleteWarning(v: Pick<Video, "name" | "mark_total" | "sakshi_ent
 export const isOpenable = (v: Pick<Video, "status">) => v.status === "ready" || v.status === "partial";
 /** Can it be exported? Same rule: there must be something counted on a playable video. */
 export const isExportable = isOpenable;
+
+/** Still being recorded, or still trying to reach the camera. */
+export const isActive = (v: Pick<Video, "status">) => v.status === "connecting" || v.status === "recording";
+
+/** "Attempt 3 · The camera refused the connection." becomes { n: 3, note: "The camera refused the connection." }. */
+export function parseAttempt(reason: string | null | undefined): { n: number | null; note: string } {
+  const m = /^Attempt (\d+)(?:\s·\s(.*))?$/s.exec((reason ?? "").trim());
+  return m ? { n: Number(m[1]), note: m[2] ?? "" } : { n: null, note: (reason ?? "").trim() };
+}
+
+/** Seconds spent attempting so far (from the moment recording was requested). */
+export function attemptingFor(createdAtIso: string, nowMs: number): number {
+  const t = new Date(createdAtIso).getTime();
+  return Number.isNaN(t) ? 0 : Math.max(0, (nowMs - t) / 1000);
+}
+
+/** The stop button reads Cancel while it is only attempting to connect. */
+export const stopLabel = (v: Pick<Video, "status">) => (v.status === "connecting" ? "Cancel" : "■ Stop");
+
+/** Wording of the confirmation before Stop / Cancel. */
+export function stopDialog(attempting: boolean): { title: string; message: string; confirm: string } {
+  return attempting
+    ? { title: "Cancel the attempt?", message: "It stops trying to reach the camera. Nothing will be recorded.", confirm: "Cancel the attempt" }
+    : { title: "Stop recording?", message: "Recording stops now and the part recorded so far is saved as a video you can count.", confirm: "Stop and keep video" };
+}
+
+/** What to tell the user right after Stop, from the video the server returns. */
+export function stopMessage(v: Pick<Video, "status" | "status_reason">): string {
+  if (v.status === "connecting") return "Cancelling the attempt…";
+  if (v.status === "recording") return "Stopping… saving the video";
+  if (v.status === "processing") return "Stopped. Saving the part that was recorded…";
+  if (v.status === "failed") return v.status_reason ?? "The recording had already stopped. Nothing was recorded.";
+  return "Stopped";
+}

@@ -2,8 +2,9 @@ import { memo } from "react";
 import { Link } from "react-router-dom";
 import type { Video } from "../../api";
 import { fmtClock, fmtDateShort, fmtTime, recordingProgress } from "../../lib/format";
+import { RECORDER_HINT, waitingForRecorder } from "../../lib/cameras";
 import { genderParts } from "../../lib/videoFilters";
-import { isExportable, isOpenable } from "../../lib/videoRow";
+import { attemptingFor, isActive, isExportable, isOpenable, parseAttempt, stopLabel } from "../../lib/videoRow";
 import { videoDetails } from "../../lib/videoDetails";
 import { Button, Spinner } from "../ui/bits";
 import RowMenu, { type MenuItem } from "./RowMenu";
@@ -11,12 +12,31 @@ import RowMenu, { type MenuItem } from "./RowMenu";
 export const COLS = 9;
 
 function StatusCell({ v, now }: { v: Video; now: number }) {
+  if (v.status === "connecting") {
+    const a = parseAttempt(v.status_reason);
+    const secs = attemptingFor(v.created_at, now);
+    const waiting = a.n === null && waitingForRecorder(null, v.created_at, now);
+    return (
+      <div>
+        <span className="badge connecting"><Spinner label="Attempting" /> Attempting</span>
+        {a.n !== null && <div className="small num muted">try {a.n} · {fmtClock(secs)}</div>}
+        {a.n === null && (waiting
+          ? <div className="small warnline" title={RECORDER_HINT}>waiting for the recorder… {fmtClock(secs)}</div>
+          : <div className="small num muted">starting… {fmtClock(secs)}</div>)}
+        {a.note && <div className="small muted attnote" title={a.note}>{a.note}</div>}
+      </div>
+    );
+  }
   if (v.status === "recording") {
     const p = v.started_at ? recordingProgress(v.started_at, v.rtsp_minutes ?? 0, now) : null;
     return (
       <div>
         <span className="badge recording"><span className="live-dot" aria-hidden /> Recording</span>
-        <div className="small num muted">{p ? `${fmtClock(p.elapsed)} / ${fmtClock(p.total)}` : "starting…"}</div>
+        {p
+          ? <div className="small num muted">{fmtClock(p.elapsed)} / {fmtClock(p.total)}</div>
+          : waitingForRecorder(v.started_at, v.created_at, now)
+            ? <div className="small warnline" title={RECORDER_HINT}>waiting for the recorder…</div>
+            : <div className="small num muted">starting…</div>}
       </div>
     );
   }
@@ -76,8 +96,8 @@ function VideoRow({ v, now, expanded, onToggle, onOpen, onStop, onExport, onDele
         <td className="c-actions">
           <div className="acts">
             {openable && <Link className="btn sm primary" to={`/videos/${v.id}`}>Count</Link>}
-            {v.status === "recording"
-              ? <Button size="sm" variant="danger" onClick={() => onStop(v)}>■ Stop</Button>
+            {isActive(v)
+              ? <Button size="sm" variant="danger" onClick={() => onStop(v)}>{stopLabel(v)}</Button>
               : <RowMenu label={`More actions for ${v.name}`} items={menu} />}
           </div>
         </td>

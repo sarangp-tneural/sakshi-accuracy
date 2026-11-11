@@ -1,5 +1,5 @@
 /** Search / filter / sort / page state of the project Videos table. The URL is the source of truth. */
-export const STATUSES = ["ready", "recording", "processing", "partial", "failed"] as const;
+export const STATUSES = ["ready", "connecting", "recording", "processing", "partial", "failed"] as const;
 export type StatusKey = (typeof STATUSES)[number];
 export const PROGRESSES = ["not_started", "counting", "compared"] as const;
 export type Progress = (typeof PROGRESSES)[number];

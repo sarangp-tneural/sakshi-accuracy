@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     min_free_disk_bytes: int = 2 * 1024**3
     # approx. bytes needed per recorded minute, used by the disk guard
     rtsp_bytes_per_minute: int = 60 * 1024**2
+    # once recording, no new data for this long ends it (kept as partial)
+    rtsp_stall_s: int = 45
+    # attempting to connect: keep trying for this long, a new try every `retry` s, each try given up on after `try` s without video
+    rtsp_attempt_window_s: int = 300
+    rtsp_attempt_retry_s: int = 10
+    rtsp_attempt_try_s: int = 25
+    rtsp_min_footage_bytes: int = 16 * 1024  # a file this big holds real video (not just the header), so the camera is "connected"
+    rtsp_io_timeout_s: int = 10  # ffmpeg's own socket timeout, so a dead camera fails fast instead of hanging
     cors_origins: list[str] = ["http://localhost:5173"]
     celery_eager: bool = False  # tests run tasks inline
 

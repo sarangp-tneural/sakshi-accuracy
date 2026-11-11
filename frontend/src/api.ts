@@ -34,12 +34,12 @@ const body = (b: unknown) => JSON.stringify(b);
 
 export interface Project {
   id: number; name: string; created_at: string;
-  video_count: number; recording_count: number; processing_count: number; failed_count: number; camera_count: number;
+  video_count: number; recording_count: number; connecting_count: number; processing_count: number; failed_count: number; camera_count: number;
   mark_total: number; mark_in: number; mark_out: number; compared_count: number; total_duration_s: number; last_activity_at: string | null;
 }
 export interface Video {
   id: number; project_id: number; name: string; source: "upload" | "rtsp";
-  status: "processing" | "ready" | "recording" | "partial" | "failed";
+  status: "connecting" | "processing" | "ready" | "recording" | "partial" | "failed";
   status_reason: string | null; duration_s: number | null; fps: number | null;
   rtsp_url_masked: string | null; rtsp_minutes: number | null; created_at: string;
   started_at: string | null; ended_at: string | null; file_size: number | null;
@@ -50,11 +50,11 @@ export interface Mark { id: number; video_id: number; time_s: number; direction:
 export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
 export interface Camera {
   id: number; project_id: number; name: string; rtsp_url_masked: string; default_minutes: number; created_at: string;
-  last_recorded_at: string | null; recording_video_id: number | null; recording_started_at: string | null; recording_minutes: number | null;
+  last_recorded_at: string | null; recording_video_id: number | null; recording_status: "connecting" | "recording" | null; recording_note: string | null; recording_started_at: string | null; recording_created_at: string | null; recording_minutes: number | null;
 }
 export interface VideoList {
   items: Video[]; total: number; page: number; page_size: number;
-  status_counts: Record<"all" | "ready" | "recording" | "processing" | "partial" | "failed", number>;
+  status_counts: Record<"all" | "ready" | "connecting" | "recording" | "processing" | "partial" | "failed", number>;
   busy: boolean;
 }
 export interface Sakshi { in_count: number | null; out_count: number | null; male_count: number | null; female_count: number | null }

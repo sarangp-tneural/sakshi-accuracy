@@ -50,7 +50,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .badge.in { color: var(--in); } .badge.out { color: var(--out); }
 .badge.male { color: var(--male); } .badge.female { color: var(--female); } .badge.unknown { color: var(--unknown); }
 .badge.ready, .badge.good { color: var(--good); } .badge.partial, .badge.warn { color: var(--warn); }
-.badge.failed, .badge.bad { color: var(--bad); } .badge.recording { color: var(--bad); } .badge.processing { color: var(--muted); }
+.badge.failed, .badge.bad { color: var(--bad); } .badge.recording { color: var(--bad); } .badge.processing { color: var(--muted); } .badge.connecting { color: var(--warn); }
 .keycap { display: inline-block; min-width: 26px; text-align: center; padding: 1px 8px; border: 1px solid var(--border); border-bottom-width: 3px; border-radius: 6px;
   background: var(--surface-2); color: var(--text); font: 700 var(--fs-sm)/1.4 var(--mono); }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--primary); display: inline-block; animation: spin .8s linear infinite; }
@@ -218,3 +218,9 @@ a.vname:hover { text-decoration: underline; color: var(--primary); }
 .pc-stats dt { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .pc-marks { margin: 0; }
 .pc-compare { display: flex; flex-direction: column; gap: 6px; }
+
+.warnline { color: var(--warn); font-weight: 600; }
+
+.attnote { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camnote { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.st-connecting[aria-pressed="false"] { color: var(--warn); }

@@ -8,7 +8,8 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import and_, exists, func, not_, or_, select
 from sqlalchemy.orm import Session
 
-from .. import control, rtsp, storage, worker
+from .. import control, liveness, rtsp, storage, worker
+from ..orphans import settle_orphan
 from ..recording import start_recording
 from ..config import settings
 from ..db import get_db
@@ -20,9 +21,10 @@ from ..schemas import RtspIn, RtspPreviewIn, VideoListOut, VideoOut
 router = APIRouter(tags=["videos"])
 
 
-STATUSES = ("ready", "recording", "processing", "partial", "failed")
-BUSY = ("recording", "processing")
-StatusT = Literal["ready", "recording", "processing", "partial", "failed"]
+STATUSES = ("ready", "connecting", "recording", "processing", "partial", "failed")
+BUSY = ("connecting", "recording", "processing")
+ACTIVE = ("connecting", "recording")  # still being recorded, or waiting for the camera
+StatusT = Literal["ready", "connecting", "recording", "processing", "partial", "failed"]
 
 
 def with_summary(db: Session, videos: list[Video]) -> list[VideoOut]:
@@ -185,11 +187,16 @@ def rtsp_preview(project_id: int, body: RtspPreviewIn, db: Session = Depends(get
 
 @router.post("/videos/{video_id}/stop", response_model=VideoOut)
 def stop_recording(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Ask the worker to stop an RTSP recording now. The video recorded so far is kept."""
+    """Ask the worker to stop an RTSP recording now (or cancel its attempt to connect). The video recorded so far is kept."""
     v = get_video(db, user, video_id)
-    if v.status != "recording":
+    if v.status not in ACTIVE:
         raise HTTPException(409, "This video is not recording")
     control.request_stop(v.id)
+    live = liveness.live_among([v.id], worker.celery)
+    if live is not None and v.id not in live:
+        # nothing is recording it (its worker was restarted or crashed): there is nobody to read the stop flag, so finish it here
+        settle_orphan(db, v)
+        db.refresh(v)
     return v
 
 
@@ -209,8 +216,11 @@ def stream(video_id: int, db: Session = Depends(get_db), user: User = Depends(cu
 @router.delete("/videos/{video_id}", status_code=204)
 def delete_video(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     v = get_video(db, user, video_id)
-    if v.status == "recording":
-        raise HTTPException(409, "Cannot delete while recording")
+    if v.status in ACTIVE:
+        live = liveness.live_among([v.id], worker.celery)
+        if live is None or v.id in live:
+            raise HTTPException(409, "Cannot delete while recording. Stop it first.")
+        control.clear_stop(v.id)  # a recording row nothing is recording any more can be removed
     db.delete(v)
     db.commit()
     shutil.rmtree(settings.data_dir / "videos" / str(video_id), ignore_errors=True)

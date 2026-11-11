@@ -15,6 +15,7 @@ from ..schemas import CameraIn, CameraOut, CameraPatch, RecordCameraIn, VideoOut
 router = APIRouter(tags=["cameras"])
 
 MAX_CAMERAS_PER_PROJECT = 20
+ACTIVE = ("connecting", "recording")
 UNREADABLE = ("The saved link can't be read any more (the server's secret key changed). "
               "Edit the camera and enter the link again.")
 
@@ -52,12 +53,13 @@ def _out(db: Session, cams: list[Camera]) -> list[CameraOut]:
     for cid, last in db.execute(select(Video.camera_id, func.max(func.coalesce(Video.started_at, Video.created_at)))
                                 .where(Video.camera_id.in_(ids)).group_by(Video.camera_id)):
         by_id[cid].last_recorded_at = last
-    for cid, vid, started, created, minutes in db.execute(
-        select(Video.camera_id, Video.id, Video.started_at, Video.created_at, Video.rtsp_minutes)
-        .where(Video.camera_id.in_(ids), Video.status == "recording").order_by(Video.id.desc())
+    for cid, vid, status, started, created, minutes, note in db.execute(
+        select(Video.camera_id, Video.id, Video.status, Video.started_at, Video.created_at, Video.rtsp_minutes, Video.status_reason)
+        .where(Video.camera_id.in_(ids), Video.status.in_(ACTIVE)).order_by(Video.id.desc())
     ):
         o = by_id[cid]
-        o.recording_video_id, o.recording_started_at, o.recording_minutes = vid, started, minutes  # oldest running one wins
+        o.recording_video_id, o.recording_status, o.recording_note = vid, status, note  # the oldest active one wins
+        o.recording_started_at, o.recording_created_at, o.recording_minutes = started, created, minutes
     return outs
 
 
@@ -123,7 +125,7 @@ def record_camera(camera_id: int, body: RecordCameraIn | None = None, db: Sessio
     get_camera(db, user, camera_id)
     # lock the camera row so two quick clicks cannot both pass the "already recording" check
     c = db.scalar(select(Camera).where(Camera.id == camera_id).with_for_update())
-    if db.scalar(select(Video.id).where(Video.camera_id == camera_id, Video.status == "recording")) is not None:
+    if db.scalar(select(Video.id).where(Video.camera_id == camera_id, Video.status.in_(ACTIVE))) is not None:
         db.rollback()
         raise HTTPException(409, "This camera is already recording")
     minutes = body.minutes if body and body.minutes is not None else c.default_minutes

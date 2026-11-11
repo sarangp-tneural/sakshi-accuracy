@@ -1,4 +1,6 @@
 import type { Video } from "../api";
+import { waitingForRecorder } from "./cameras";
+import { attemptingFor, parseAttempt } from "./videoRow";
 import { fmtBytes, fmtClock, fmtDateTime, fmtStream, fmtTime } from "./format";
 
 export interface Detail {
@@ -16,6 +18,7 @@ export function videoDetails(v: Video, now: number): Detail[] {
   const out: Detail[] = [];
   const isRtsp = v.source === "rtsp";
   const recording = v.status === "recording";
+  const attempting = v.status === "connecting";
   const planned = (v.rtsp_minutes ?? 0) * 60;
 
   if (isRtsp) {
@@ -23,23 +26,37 @@ export function videoDetails(v: Video, now: number): Detail[] {
     if (v.rtsp_url_masked) out.push({ label: "Stream", value: v.rtsp_url_masked, wide: true, mono: true });
     out.push({ label: "Requested", value: fmtDateTime(v.created_at) });
     const startedMs = v.started_at ? new Date(v.started_at).getTime() : null;
-    out.push({ label: "Recording started", value: v.started_at ? fmtDateTime(v.started_at) : recording ? "starting…" : "not recorded" });
-    if (recording) {
-      const elapsed = startedMs ? Math.min(planned, Math.max(0, (now - startedMs) / 1000)) : 0;
-      out.push({ label: "Planned end", value: startedMs ? fmtDateTime(new Date(startedMs + planned * 1000).toISOString()) : "—" });
-      out.push({ label: "Recorded so far", value: `${fmtClock(elapsed)} of ${fmtClock(planned)}` });
+    const createdMs = new Date(v.created_at).getTime();
+
+    if (attempting) {
+      const a = parseAttempt(v.status_reason);
+      const waiting = a.n === null && waitingForRecorder(null, v.created_at, now);
+      out.push({ label: "Recording started", value: "not yet: still attempting to connect", tone: "muted" });
+      out.push({ label: "Attempting for", value: fmtClock(attemptingFor(v.created_at, now)) });
+      out.push({ label: "Attempt", value: waiting ? "waiting for the recorder…" : a.n === null ? "starting…" : `try ${a.n}`, tone: waiting ? "warn" : undefined });
     } else {
-      out.push({ label: "Recording ended", value: v.ended_at ? fmtDateTime(v.ended_at) : "not recorded" });
-      const ran = v.started_at && v.ended_at ? (new Date(v.ended_at).getTime() - new Date(v.started_at).getTime()) / 1000 : null;
-      // a failed recording produced no usable video, so "recorded" would be misleading: only say how long the attempt ran
-      const rec = v.status === "failed" ? null : (v.duration_s ?? ran);
-      if (v.status === "failed") {
-        if (ran !== null) out.push({ label: "Attempt ran for", value: fmtClock(ran) });
-      } else if (rec !== null && planned) {
-        const short = rec < planned - GRACE_S;
-        out.push({ label: "Recorded", value: `${fmtClock(rec)} of ${fmtClock(planned)} planned${short ? " (ended early)" : ""}`, tone: short ? "warn" : undefined });
-      } else if (planned) {
-        out.push({ label: "Planned length", value: `${v.rtsp_minutes} min` });
+      out.push({ label: "Recording started", value: v.started_at ? fmtDateTime(v.started_at) : recording ? (waitingForRecorder(null, v.created_at, now) ? "waiting for the recorder…" : "starting…")
+          : v.status === "failed" ? "never started (the camera did not connect)" : "not recorded", // older videos simply never stored a start time
+        tone: !v.started_at && recording && waitingForRecorder(null, v.created_at, now) ? "warn" : !v.started_at && !recording ? "muted" : undefined });
+      if (recording) {
+        const elapsed = startedMs ? Math.min(planned, Math.max(0, (now - startedMs) / 1000)) : 0;
+        out.push({ label: "Planned end", value: startedMs ? fmtDateTime(new Date(startedMs + planned * 1000).toISOString()) : "—" });
+        out.push({ label: "Recorded so far", value: `${fmtClock(elapsed)} of ${fmtClock(planned)}` });
+      } else {
+        out.push({ label: v.started_at || v.status !== "failed" ? "Recording ended" : "Attempts ended", value: v.ended_at ? fmtDateTime(v.ended_at) : "not recorded" });
+        const endMs = v.ended_at ? new Date(v.ended_at).getTime() : null;
+        const ran = startedMs !== null && endMs !== null ? (endMs - startedMs) / 1000 : null;
+        // a failed recording produced no usable video, so "recorded" would be misleading: only say how long the attempt ran
+        const rec = v.status === "failed" ? null : (v.duration_s ?? ran);
+        if (v.status === "failed") {
+          const from = startedMs ?? createdMs;
+          if (endMs !== null && !Number.isNaN(from)) out.push({ label: startedMs === null ? "Attempted for" : "Attempt ran for", value: fmtClock((endMs - from) / 1000) });
+        } else if (rec !== null && planned) {
+          const short = rec < planned - GRACE_S;
+          out.push({ label: "Recorded", value: `${fmtClock(rec)} of ${fmtClock(planned)} planned${short ? " (ended early)" : ""}`, tone: short ? "warn" : undefined });
+        } else if (planned) {
+          out.push({ label: "Planned length", value: `${v.rtsp_minutes} min` });
+        }
       }
     }
   } else {
@@ -55,7 +72,10 @@ export function videoDetails(v: Video, now: number): Detail[] {
   if (total) out.push({ label: "Gender", value: `♂ ${v.mark_male} · ♀ ${v.mark_female} · ? ${v.mark_unknown}` });
   out.push({ label: "Sakshi result", value: v.sakshi_entered ? "entered" : "not entered", tone: v.sakshi_entered ? "good" : "muted" });
 
-  if (v.status_reason) out.push({ label: v.status === "failed" ? "Why it failed" : v.status === "partial" ? "Why it is partial" : "Note", value: v.status_reason, wide: true,
+  if (attempting) {
+    const note = parseAttempt(v.status_reason).note;
+    if (note) out.push({ label: "Latest attempt", value: note, wide: true, tone: "warn" });
+  } else if (v.status_reason) out.push({ label: v.status === "failed" ? "Why it failed" : v.status === "partial" ? "Why it is partial" : "Note", value: v.status_reason, wide: true,
     tone: v.status === "failed" ? "bad" : v.status === "partial" ? "warn" : undefined });
   return out;
 }

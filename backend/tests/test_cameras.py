@@ -100,7 +100,7 @@ def test_record_uses_the_saved_link_and_length(client, auth, pid, queued):
     r = client.post(f"/api/cameras/{cid}/record", headers=auth)
     assert r.status_code == 201
     v = r.json()
-    assert v["status"] == "recording" and v["rtsp_minutes"] == 15 and v["camera_id"] == cid and v["source"] == "rtsp"
+    assert v["status"] == "connecting" and v["rtsp_minutes"] == 15 and v["camera_id"] == cid and v["source"] == "rtsp"
     assert v["name"].startswith("Entrance ") and "s3cret" not in r.text and "admin" not in r.text
     assert stored_link(v["id"]) == URL and queued == [v["id"]]
     assert v["rtsp_url_masked"] == "rtsp://***:***@10.0.0.5:554/stream1"
@@ -178,7 +178,7 @@ def test_deleting_a_camera_keeps_its_recordings(client, auth, pid, queued):
     assert client.delete(f"/api/cameras/{cid}", headers=auth).status_code == 204
     assert client.get(f"/api/projects/{pid}/cameras", headers=auth).json() == []
     v = client.get(f"/api/videos/{vid}", headers=auth).json()
-    assert v["camera_id"] is None and v["camera_name"] is None and v["status"] == "recording"
+    assert v["camera_id"] is None and v["camera_name"] is None and v["status"] == "connecting"
     assert client.delete(f"/api/cameras/{cid}", headers=auth).status_code == 404
 
 

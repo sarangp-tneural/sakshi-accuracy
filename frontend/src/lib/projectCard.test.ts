@@ -47,9 +47,16 @@ describe("comparedPct", () => {
 
 describe("stateBadges", () => {
   it("lists only what needs attention, most important first", () => {
-    expect(stateBadges({ recording_count: 0, processing_count: 0, failed_count: 0 })).toEqual([]);
-    expect(stateBadges({ recording_count: 1, processing_count: 2, failed_count: 3 }).map((b) => b.key)).toEqual(["recording", "processing", "failed"]);
-    expect(stateBadges({ recording_count: 0, processing_count: 0, failed_count: 2 })).toEqual([{ key: "failed", label: "Failed", n: 2 }]);
+    expect(stateBadges({ recording_count: 0, connecting_count: 0, processing_count: 0, failed_count: 0 })).toEqual([]);
+    expect(stateBadges({ recording_count: 1, connecting_count: 4, processing_count: 2, failed_count: 3 }).map((b) => b.key)).toEqual(["recording", "connecting", "processing", "failed"]);
+    expect(stateBadges({ recording_count: 0, connecting_count: 0, processing_count: 0, failed_count: 2 })).toEqual([{ key: "failed", label: "Failed", n: 2 }]);
+  });
+});
+
+describe("stateBadges: attempting is not recording", () => {
+  it("a project that is only attempting never says Recording", () => {
+    const b = stateBadges({ recording_count: 0, connecting_count: 2, processing_count: 0, failed_count: 0 });
+    expect(b).toEqual([{ key: "connecting", label: "Attempting", n: 2 }]);
   });
 });
 

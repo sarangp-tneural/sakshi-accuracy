@@ -127,12 +127,12 @@ def test_pagination(client, auth, pid):
 
 def test_status_counts_ignore_status_filter_but_respect_the_others(client, auth, seeded):
     allc = get(client, auth, seeded).json()["status_counts"]
-    assert allc == {"all": 7, "ready": 3, "recording": 1, "processing": 1, "partial": 1, "failed": 1}
+    assert allc == {"all": 7, "ready": 3, "connecting": 0, "recording": 1, "processing": 1, "partial": 1, "failed": 1}
     # picking a status does not change the chips...
     assert get(client, auth, seeded, status="failed").json()["status_counts"] == allc
     # ...but other filters do
     rtsp = get(client, auth, seeded, source="rtsp", status="ready").json()["status_counts"]
-    assert rtsp == {"all": 2, "ready": 0, "recording": 1, "processing": 0, "partial": 1, "failed": 0}
+    assert rtsp == {"all": 2, "ready": 0, "connecting": 0, "recording": 1, "processing": 0, "partial": 1, "failed": 0}
     q = get(client, auth, seeded, q="alpha").json()
     assert q["status_counts"]["all"] == 1 and q["total"] == 1
 

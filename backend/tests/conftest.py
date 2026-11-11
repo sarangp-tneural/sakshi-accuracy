@@ -7,7 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from app import worker
+from app import control, liveness, worker
+from tests.fakeredis import FakeRedis
 from app.config import settings
 from app.db import Base, engine
 from app.main import app
@@ -29,9 +30,12 @@ def _db():
 
 @pytest.fixture(autouse=True)
 def _clean(tmp_path, monkeypatch):
+    monkeypatch.setattr(control, "_client", FakeRedis())  # never the real Redis
     monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
     # never run real ffmpeg tasks from API tests
     monkeypatch.setattr(worker, "enqueue", lambda task, vid: None)
+    # API tests must not ask the real broker which workers are alive: by default every recording counts as live
+    monkeypatch.setattr(liveness, "live_among", lambda ids, celery_app=None: set(ids))
     yield
     with engine.begin() as c:
         c.execute(text("truncate users, projects, videos, marks, sakshi_results, user_settings restart identity cascade"))

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { Project } from "../../api";
+import { Spinner } from "../ui/bits";
 import { comparedPct, fmtAgo, fmtTotalDuration, projectSummary, stateBadges } from "../../lib/projectCard";
 
 /** A project at a glance: what is in it, what is happening now, and how far the Sakshi comparison has got. */
@@ -21,7 +22,7 @@ export default function ProjectCard({ p, now }: { p: Project; now: number }) {
           ? <span className="small muted">{p.video_count === 0 ? "No videos yet" : "Nothing recording or processing"}</span>
           : badges.map((b) => (
             <span key={b.key} className={`badge ${b.key}`}>
-              {b.key === "recording" && <span className="live-dot" aria-hidden />}{b.label} {b.n}
+              {b.key === "recording" && <span className="live-dot" aria-hidden />}{b.key === "connecting" && <Spinner label="Attempting" />}{b.label} {b.n}
             </span>
           ))}
       </div>

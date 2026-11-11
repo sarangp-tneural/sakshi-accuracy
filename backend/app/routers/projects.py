@@ -20,14 +20,16 @@ def with_summary(db: Session, projects: list[Project]) -> list[ProjectOut]:
     ids = list(by_id)
     last: dict[int, list] = {i: [by_id[i].created_at] for i in ids}
 
-    for pid, n, rec, proc, failed, dur, newest in db.execute(
+    for pid, n, rec, conn, proc, failed, dur, newest in db.execute(
         select(Video.project_id, func.count(),
-               func.count(case((Video.status == "recording", 1))), func.count(case((Video.status == "processing", 1))),
+               func.count(case((Video.status == "recording", 1))), func.count(case((Video.status == "connecting", 1))),
+               func.count(case((Video.status == "processing", 1))),
                func.count(case((Video.status == "failed", 1))), func.coalesce(func.sum(Video.duration_s), 0.0), func.max(Video.created_at))
         .where(Video.project_id.in_(ids)).group_by(Video.project_id)
     ):
         o = by_id[pid]
-        o.video_count, o.recording_count, o.processing_count, o.failed_count, o.total_duration_s = n, rec, proc, failed, float(dur)
+        o.video_count, o.recording_count, o.connecting_count = n, rec, conn
+        o.processing_count, o.failed_count, o.total_duration_s = proc, failed, float(dur)
         last[pid].append(newest)
 
     for pid, n in db.execute(select(Camera.project_id, func.count()).where(Camera.project_id.in_(ids)).group_by(Camera.project_id)):

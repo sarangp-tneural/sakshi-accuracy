@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lengthOptions, recordingText, startLabel, validateCamera } from "./cameras";
+import { RECORDER_WAIT_S, attemptingText, lengthOptions, recordingText, startLabel, validateCamera, waitingForRecorder } from "./cameras";
 import { validateRtsp } from "./rtsp";
 
 const ok = { name: "Entrance", url: "rtsp://u:p@10.0.0.5:554/s", minutes: 30 };
@@ -58,4 +58,41 @@ describe("validateRtsp (shared with the one-off dialog)", () => {
     expect(validateRtsp("", 5).url).toBeTruthy();
     expect(validateRtsp("rtsp://h/x", 500).minutes).toMatch(/120/);
   });
+});
+
+describe("waiting for the recorder", () => {
+  const created = "2026-11-10T12:00:00Z";
+  const at = (s: number) => new Date(created).getTime() + s * 1000;
+  it("a fresh request is just starting; after 20 s it says the recorder has not picked it up", () => {
+    expect(waitingForRecorder(null, created, at(5))).toBe(false);
+    expect(waitingForRecorder(null, created, at(RECORDER_WAIT_S))).toBe(false);
+    expect(waitingForRecorder(null, created, at(RECORDER_WAIT_S + 1))).toBe(true);
+  });
+  it("once ffmpeg has started it is never 'waiting'", () => expect(waitingForRecorder("2026-11-10T12:00:03Z", created, at(500))).toBe(false));
+  it("no request time known: do not claim anything", () => {
+    expect(waitingForRecorder(null, null, at(500))).toBe(false);
+    expect(waitingForRecorder(null, "nope", at(500))).toBe(false);
+  });
+  it("recordingText uses it", () => {
+    expect(recordingText(null, 30, at(5), created)).toBe("starting…");
+    expect(recordingText(null, 30, at(60), created)).toBe("waiting for the recorder…");
+    expect(recordingText(null, 30, at(60))).toBe("starting…"); // old callers without a request time
+    expect(recordingText("2026-11-10T12:00:03Z", 30, at(63), created)).toBe("01:00 / 30:00");
+  });
+});
+
+describe("attemptingText (the camera card while attempting)", () => {
+  const created = "2026-11-10T12:00:00Z";
+  const at = (s: number) => new Date(created).getTime() + s * 1000;
+  it("shows the try number and time, with the last reason as detail", () => {
+    expect(attemptingText("Attempt 3 · The camera refused the connection.", created, at(42))).toEqual({ line: "try 3 · 00:42", detail: "The camera refused the connection.", warn: false });
+    expect(attemptingText("Attempt 1 · connecting…", created, at(1))).toMatchObject({ line: "try 1 · 00:01", detail: "connecting…" });
+  });
+  it("before any try has been reported it is starting, and after 20 s it says the recorder is not picking it up", () => {
+    expect(attemptingText(null, created, at(5))).toMatchObject({ line: "starting… 00:05", warn: false });
+    expect(attemptingText(null, created, at(RECORDER_WAIT_S + 1))).toMatchObject({ line: expect.stringContaining("waiting for the recorder…"), warn: true });
+    expect(attemptingText(null, created, at(RECORDER_WAIT_S + 1)).detail).toMatch(/run.sh/);
+  });
+  it("once a try is reported it is never 'waiting for the recorder'", () => expect(attemptingText("Attempt 1 · connecting…", created, at(500)).warn).toBe(false));
+  it("a missing request time does not break it", () => expect(attemptingText(null, null, at(500))).toMatchObject({ line: "starting… 00:00" }));
 });
