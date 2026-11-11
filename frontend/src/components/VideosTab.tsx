@@ -6,7 +6,8 @@ import { useNow } from "../hooks/useNow";
 import { useUploads } from "../hooks/useUploads";
 import { useVideoList } from "../hooks/useVideoList";
 import { lastPage, hasActiveFilters, rangeLabel, type StatusKey } from "../lib/videoFilters";
-import { deleteWarning, isActive, stopDialog, stopMessage } from "../lib/videoRow";
+import { fmtBytes } from "../lib/format";
+import { deleteWarning, isActive, removeFileWarning, stopDialog, stopMessage } from "../lib/videoRow";
 import CameraDialog from "./cameras/CameraDialog";
 import CameraPreview from "./cameras/CameraPreview";
 import CameraStrip from "./cameras/CameraStrip";
@@ -27,6 +28,7 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
   const nav = useNavigate();
   const [dialog, setDialog] = useState<"upload" | "record" | null>(null);
   const [del, setDel] = useState<Video | null>(null);
+  const [rmFile, setRmFile] = useState<Video | null>(null);
   const [exp, setExp] = useState<Video | null>(null);
   const [stopping, setStopping] = useState<{ id: number; name: string; attempting: boolean } | null>(null);
   const { cameras, reload: reloadCameras } = useCameras(projectId);
@@ -113,7 +115,7 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
             </div>
           ) : (
             <VideoTable items={data.items} uploads={uploads.items} now={now} dim={loading}
-              onCancelUpload={uploads.cancel} onOpen={(v) => nav(`/videos/${v.id}`)} onStop={(v) => setStopping({ id: v.id, name: v.name, attempting: v.status === "connecting" })} onExport={setExp} onDelete={setDel} />
+              onCancelUpload={uploads.cancel} onOpen={(v) => nav(`/videos/${v.id}`)} onStop={(v) => setStopping({ id: v.id, name: v.name, attempting: v.status === "connecting" })} onExport={setExp} onDelete={setDel} onRemoveFile={setRmFile} />
           )}
 
           {(total > data.page_size || filters.page > 1) && (
@@ -147,6 +149,11 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
         <ConfirmDialog title="Delete video?" danger confirmLabel="Delete" message={deleteWarning(del)}
           onCancel={() => setDel(null)}
           onConfirm={() => { const v = del; setDel(null); api.deleteVideo(v.id).then(() => { toast.success("Video deleted"); reload(); }).catch(toast.error); }} />
+      )}
+      {rmFile && (
+        <ConfirmDialog title="Delete video file?" danger confirmLabel="Delete video file" message={removeFileWarning(rmFile, fmtBytes)}
+          onCancel={() => setRmFile(null)}
+          onConfirm={() => { const v = rmFile; setRmFile(null); api.removeVideoFile(v.id).then((r) => { toast.success(`Video file deleted. Freed ${fmtBytes(r.freed_bytes)}. Counts and details are kept.`); reload(); }).catch(toast.error); }} />
       )}
       {stopping && (() => { const d = stopDialog(stopping.attempting); return (
         <ConfirmDialog title={d.title} confirmLabel={d.confirm} message={d.message}

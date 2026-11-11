@@ -45,6 +45,7 @@ export interface Video {
   started_at: string | null; ended_at: string | null; file_size: number | null;
   width: number | null; height: number | null; vcodec: string | null;
   mark_total: number; mark_in: number; mark_out: number; mark_male: number; mark_female: number; mark_unknown: number; sakshi_entered: boolean; camera_id: number | null; camera_name: string | null;
+  video_removed_at?: string | null; disk_bytes?: number | null; // set once only the video FILE was deleted
 }
 export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number | null; y: number | null }
 export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
@@ -79,6 +80,7 @@ export const api = {
   recordCamera: (id: number, minutes?: number) => req<Video>(`/cameras/${id}/record`, { method: "POST", body: body(minutes === undefined ? {} : { minutes }) }),
   stopRecording: (id: number) => req<Video>(`/videos/${id}/stop`, { method: "POST" }),
   deleteVideo: (id: number) => req<void>(`/videos/${id}`, { method: "DELETE" }),
+  removeVideoFile: (id: number) => req<{ video: Video; freed_bytes: number }>(`/videos/${id}/file`, { method: "DELETE" }),
   marks: (vid: number) => req<Mark[]>(`/videos/${vid}/marks`),
   addMark: (vid: number, m: MarkFields) => req<Mark>(`/videos/${vid}/marks`, { method: "POST", body: body(m) }),
   patchMark: (id: number, m: Partial<MarkFields>) => req<Mark>(`/marks/${id}`, { method: "PATCH", body: body(m) }),

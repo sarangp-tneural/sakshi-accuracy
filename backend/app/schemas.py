@@ -66,6 +66,13 @@ class VideoOut(BaseModel):
     sakshi_entered: bool = False
     camera_id: int | None = None
     camera_name: str | None = None
+    video_removed_at: datetime | None = None  # the video file was deleted to free space; everything else stays
+    disk_bytes: int | None = None  # what the video files take on disk now (None once removed or if there are none)
+
+
+class VideoFileRemovedOut(BaseModel):
+    video: VideoOut
+    freed_bytes: int
 
 
 class VideoListOut(BaseModel):

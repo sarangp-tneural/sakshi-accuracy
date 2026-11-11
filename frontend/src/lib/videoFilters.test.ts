@@ -151,3 +151,11 @@ describe("upload check", () => {
     expect(checkFile({ name: "a.mp4", size: 5 * 1024 ** 3 })).toMatch(/4 GB/);
   });
 });
+
+describe("size sort", () => {
+  it("round-trips through the URL", () => {
+    const p = parseFilters(new URLSearchParams("sort=size"));
+    expect(p.sort).toBe("size");
+    expect(serializeFilters(p).get("sort")).toBe("size");
+  });
+});

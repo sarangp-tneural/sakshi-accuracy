@@ -23,6 +23,7 @@ import SakshiComparison from "../components/Comparison";
 import GoToTime from "../components/GoToTime";
 import SettingsDrawer from "../components/SettingsDrawer";
 import ExportDialog from "../components/ExportDialog";
+import VideoUnavailable from "../components/VideoUnavailable";
 
 type LocalMark = Mark & { pending?: boolean };
 let tempId = -1;
@@ -72,6 +73,7 @@ export default function Count() {
   const restoreRate = useRef<number | null>(null);
   const S = useRef(settings); S.current = settings;
   const paused = useShortcutsPaused();
+  const noVideo = !!video?.video_removed_at; // only the file is gone: marks, counts and results remain
 
   // dark surface for the whole Count screen
   useEffect(() => {
@@ -177,6 +179,7 @@ export default function Count() {
 
   // single global key handler; reads current bindings from the ref so rebinding applies immediately
   useEffect(() => {
+    if (noVideo) return; // counting and playback keys need a video
     const onKey = (e: KeyboardEvent) => {
       const d = decideKey(e, S.current.key_bindings, { capturing: capture.active, repeatable: HOLD_TO_REPEAT });
       if (d.type === "ignore") return;
@@ -193,7 +196,7 @@ export default function Count() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [addMark, setSpeed, togglePlay, undo, jumpBack, step]);
+  }, [addMark, setSpeed, togglePlay, undo, jumpBack, step, noVideo]);
 
   useEffect(() => () => clearTimeout(slowTimer.current), []);
 
@@ -294,19 +297,20 @@ export default function Count() {
               <span className="vmeta">
                 {duration > 0 && <span className="num">{fmtTime(duration)}</span>}
                 <span>{video.source === "rtsp" ? "RTSP recording" : "upload"}</span>
+                {noVideo && <span className="vremoved" title="The video file was deleted to free space">Video removed</span>}
                 {video.status === "partial" && <span className="badge partial" title={video.status_reason ?? ""}>partial recording</span>}
               </span>
             </div>
             <div className="head-tools">
-              <span className={`kbd-state ${paused ? "off" : "on"}`} role="status"
+              {!noVideo && <span className={`kbd-state ${paused ? "off" : "on"}`} role="status"
                 title={paused ? "Single-key shortcuts are paused while you type or rebind. Click the video to resume." : "Counting keys are active"}>
                 {paused ? "⏸ Shortcuts paused" : "⌨ Shortcuts on"}
-              </span>
-              <GoToTime videoRef={vref} duration={duration} onDone={focusStage} />
+              </span>}
+              {!noVideo && <GoToTime videoRef={vref} duration={duration} onDone={focusStage} />}
               <div className="tool-group" role="group" aria-label="Display and sound">
-                <Button size="sm" variant="ghost" aria-pressed={showPoints} title="Show points on the video"
+                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={showPoints} title="Show points on the video"
                   onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>
-                  <span aria-hidden>📍</span><span className="tl-label"> Points</span></Button>
+                  <span aria-hidden>📍</span><span className="tl-label"> Points</span></Button>}
                 <Button size="sm" variant="ghost" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)}
                   title="Beep on each mark (not the video audio)"><span aria-hidden>{settings.sound_enabled ? "🔔" : "🔕"}</span><span className="tl-label"> Click sound</span></Button>
               </div>
@@ -314,6 +318,12 @@ export default function Count() {
               <Button size="sm" onClick={() => setShowSettings(true)}><span aria-hidden>⚙</span> Settings</Button>
             </div>
           </header>
+          {noVideo ? (
+            <>
+              <VideoUnavailable removedAt={video.video_removed_at} />
+              <div className="count-notice" role="status">Counting needs the video. You can still review and edit marks, enter the Sakshi result and export.</div>
+            </>
+          ) : (<>
           <VideoViewport ref={viewport} videoRef={vref} stageRef={stage} src={streamUrl(id)} fps={video.fps}
             points={pointMarks} selectedId={selectedId} showPoints={showPoints} muted={muted} pickMode={pickFor !== null}
             onPick={placePoint} onToggle={togglePlay}
@@ -324,6 +334,7 @@ export default function Count() {
           <ControllerBar videoRef={vref} duration={duration} playing={playing} rate={rate} muted={muted} onToggleMute={toggleMute} marks={timelineMarks}
             selectedId={selectedId} onSelect={setSelectedId}
             onTogglePlay={togglePlay} onStep={step} onJumpBack={jumpBack} onSetSpeed={setSpeed} />
+          </>)}
         </div>
 
         <aside className="side">
@@ -331,9 +342,9 @@ export default function Count() {
           <section className="card marks">
             <h3>Marks ({marks.length}) <span className="small muted">newest first</span></h3>
             <MarksList marks={marks} currentId={nearestId} selectedId={selectedId} pickingId={pickFor}
-              onSeek={seekTo} onPatch={patchMark} onDelete={removeMark} onPlacePoint={startPick} onClearPoint={clearPoint} onReplay={replay} onDone={focusStage} />
+              onSeek={seekTo} onPatch={patchMark} onDelete={removeMark} onPlacePoint={startPick} onClearPoint={clearPoint} onReplay={replay} onDone={focusStage} noVideo={noVideo} />
           </section>
-          <Legend bindings={settings.key_bindings} />
+          {!noVideo && <Legend bindings={settings.key_bindings} />}
         </aside>
 
         {showSettings && <SettingsDrawer onClose={() => { setShowSettings(false); setTimeout(focusStage, 0); }} />}

@@ -115,3 +115,13 @@
 }
 
 @media (min-width: 1600px) { .count-screen { grid-template-columns: minmax(0, 1fr) 360px; } }
+
+/* video file deleted: a placeholder where the picture would be */
+.vunavail { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); text-align: center; padding: var(--s-4);
+  background: var(--stage); color: #9aa3b2; border-radius: var(--r-md); }
+.vunavail .vu-art { width: min(220px, 40%); height: auto; }
+.vunavail .vu-title { font-size: 1.15rem; font-weight: 700; color: #d7dce5; }
+.vunavail .vu-sub { max-width: 44ch; font-size: .9rem; }
+.vunavail.compact .vu-art { width: 90px; }
+.count-notice { padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: rgba(255,255,255,.06); font-size: .85rem; }
+@media (max-width: 900px) { .vunavail { aspect-ratio: 16 / 9; flex: none; } }

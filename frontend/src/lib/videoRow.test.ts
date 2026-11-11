@@ -63,3 +63,30 @@ describe("attempting helpers", () => {
   });
   it("the message after cancelling an attempt", () => expect(stopMessage({ status: "connecting", status_reason: null })).toBe("Cancelling the attempt…"));
 });
+
+import { canRemoveFile, isFileRemoved, removeFileWarning } from "./videoRow";
+import { fmtBytes } from "./format";
+
+describe("deleting only the video file", () => {
+  it("is offered for finished videos whose file still exists", () => {
+    for (const status of ["ready", "partial", "failed"] as const) expect(canRemoveFile({ status, video_removed_at: null })).toBe(true);
+    for (const status of ["connecting", "recording", "processing"] as const) expect(canRemoveFile({ status, video_removed_at: null })).toBe(false);
+    expect(canRemoveFile({ status: "ready", video_removed_at: "2026-11-11T10:00:00Z" })).toBe(false);
+    expect(canRemoveFile({ status: "ready" })).toBe(true); // older API answers
+    expect(isFileRemoved({ video_removed_at: "x" })).toBe(true);
+    expect(isFileRemoved({})).toBe(false);
+  });
+  it("the confirmation says what is freed, what stays and that it cannot be undone", () => {
+    const m = removeFileWarning({ name: "cam", mark_total: 24, sakshi_entered: true, disk_bytes: 62 * 1024 ** 2, file_size: 1 }, fmtBytes);
+    expect(m).toContain("“cam”");
+    expect(m).toContain(`frees about ${fmtBytes(62 * 1024 ** 2)}`);
+    expect(m).toContain("24 marks, the Sakshi result and all its details stay");
+    expect(m).toContain("cannot be undone");
+  });
+  it("copes with no marks, no Sakshi result and an unknown size", () => {
+    const m = removeFileWarning({ name: "a", mark_total: 1, sakshi_entered: false, disk_bytes: null, file_size: null }, fmtBytes);
+    expect(m).not.toContain("frees");
+    expect(m).toContain("1 mark and all its details stay");
+    expect(removeFileWarning({ name: "b", mark_total: 0, sakshi_entered: false, disk_bytes: null, file_size: 2048 }, fmtBytes)).toMatch(/frees about 2\.0 KB\. All its details stay\./);
+  });
+});

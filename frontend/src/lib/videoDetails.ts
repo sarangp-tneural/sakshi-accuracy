@@ -65,7 +65,10 @@ export function videoDetails(v: Video, now: number): Detail[] {
   }
 
   out.push({ label: "Video", value: fmtStream(v.width, v.height, v.fps, v.vcodec) });
-  out.push({ label: "File size", value: fmtBytes(v.file_size) });
+  if (v.video_removed_at) {
+    out.push({ label: "Video file", value: `deleted on ${fmtDateTime(v.video_removed_at)} to free space`, tone: "warn" });
+    out.push({ label: "Original size", value: fmtBytes(v.file_size) });
+  } else out.push({ label: "File size", value: fmtBytes(v.file_size) });
 
   const total = v.mark_total;
   out.push({ label: "Marks", value: total ? `${total} · ▲ IN ${v.mark_in} · ▼ OUT ${v.mark_out}` : "none yet", tone: total ? undefined : "muted" });

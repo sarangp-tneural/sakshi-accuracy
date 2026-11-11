@@ -47,3 +47,19 @@ export function stopMessage(v: Pick<Video, "status" | "status_reason">): string 
   if (v.status === "failed") return v.status_reason ?? "The recording had already stopped. Nothing was recorded.";
   return "Stopped";
 }
+
+/** Only the video FILE was deleted; counts, marks and results are still there. */
+export const isFileRemoved = (v: Pick<Video, "video_removed_at">) => !!v.video_removed_at;
+
+/** Can "Delete video file" be offered? Finished videos whose file still exists. */
+export const canRemoveFile = (v: Pick<Video, "status" | "video_removed_at">) =>
+  !isFileRemoved(v) && (v.status === "ready" || v.status === "partial" || v.status === "failed");
+
+/** Confirmation text for deleting only the video file. */
+export function removeFileWarning(v: Pick<Video, "name" | "mark_total" | "sakshi_entered" | "disk_bytes" | "file_size">, fmt: (n: number | null) => string): string {
+  const size = v.disk_bytes ?? v.file_size;
+  const frees = size ? `This frees about ${fmt(size)}. ` : "";
+  const keep = [v.mark_total > 0 ? `its ${v.mark_total} mark${v.mark_total === 1 ? "" : "s"}` : "", v.sakshi_entered ? "the Sakshi result" : "", "all its details"].filter(Boolean);
+  const list = keep.length > 1 ? `${keep.slice(0, -1).join(", ")} and ${keep[keep.length - 1]}` : keep[0];
+  return `Delete the video file of “${v.name}”? ${frees}${list[0].toUpperCase()}${list.slice(1)} stay. The video can no longer be watched and new marks cannot be added. This cannot be undone.`;
+}

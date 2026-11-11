@@ -15,6 +15,19 @@ def video_dir(video_id: int) -> Path:
     return d
 
 
+def video_path(video_id: int) -> Path:
+    """The folder of a video's files, WITHOUT creating it (video_dir creates it)."""
+    return settings.data_dir / "videos" / str(video_id)
+
+
+def dir_size(path: Path) -> int:
+    """Total size in bytes of the files under `path`; 0 if it does not exist."""
+    try:
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+    except OSError:
+        return 0
+
+
 def free_bytes(path: Path | None = None) -> int:
     p = path or settings.data_dir
     p.mkdir(parents=True, exist_ok=True)

@@ -3,7 +3,7 @@ import { PROGRESSES, SORTS, hasActiveFilters, type Added, type Filters, type Pro
 import { Button } from "../ui/bits";
 
 const PROGRESS_LABEL: Record<Progress, string> = { not_started: "Not started (no marks)", counting: "Counting (marks, no Sakshi)", compared: "Compared (Sakshi entered)" };
-const SORT_LABEL: Record<Sort, string> = { newest: "Newest first", oldest: "Oldest first", name: "Name (A–Z)", duration: "Longest first" };
+const SORT_LABEL: Record<Sort, string> = { newest: "Newest first", oldest: "Oldest first", name: "Name (A–Z)", duration: "Longest first", size: "Largest file" };
 const DEBOUNCE_MS = 300;
 
 interface Props {

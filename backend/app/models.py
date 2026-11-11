@@ -66,6 +66,8 @@ class Video(Base):
     rtsp_url_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     rtsp_url_masked: Mapped[str | None] = mapped_column(Text, nullable=True)
     rtsp_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # set when only the video FILE was deleted (to free disk space); the row, marks and results stay
+    video_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id", ondelete="SET NULL"), nullable=True, index=True)
     # when ffmpeg actually started / finished recording (created_at is when it was requested)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -14,9 +14,9 @@ from ..recording import start_recording
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, get_project, get_video
-from ..models import Camera, Mark, SakshiResult, User, Video
+from ..models import Camera, Mark, SakshiResult, User, Video, now
 from ..sql import sakshi_has_value
-from ..schemas import RtspIn, RtspPreviewIn, VideoListOut, VideoOut
+from ..schemas import RtspIn, RtspPreviewIn, VideoFileRemovedOut, VideoListOut, VideoOut
 
 router = APIRouter(tags=["videos"])
 
@@ -52,6 +52,10 @@ def with_summary(db: Session, videos: list[Video]) -> list[VideoOut]:
         by_id[vid].sakshi_entered = True
     for o in outs:
         o.mark_unknown = o.mark_total - o.mark_male - o.mark_female
+    for o in outs:
+        if o.video_removed_at is None:
+            size = storage.dir_size(storage.video_path(o.id))
+            o.disk_bytes = size or None
     cam_ids = {o.camera_id for o in outs if o.camera_id}
     if cam_ids:
         names = dict(db.execute(select(Camera.id, Camera.name).where(Camera.id.in_(cam_ids))).all())
@@ -80,7 +84,8 @@ def list_videos(
     progress: Literal["not_started", "counting", "compared"] | None = None,
     added_from: datetime | None = None,
     added_to: datetime | None = None,
-    sort: Literal["newest", "oldest", "name", "duration"] = "newest",
+    video: Literal["available", "removed"] | None = None,
+    sort: Literal["newest", "oldest", "name", "duration", "size"] = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -114,6 +119,10 @@ def list_videos(
             c.append(and_(n_marks > 0, not_(compared)))
         elif progress == "not_started":
             c.append(and_(n_marks == 0, not_(compared)))
+        if video == "available":
+            c.append(Video.video_removed_at.is_(None))
+        elif video == "removed":
+            c.append(Video.video_removed_at.isnot(None))
         if added_from:
             c.append(Video.created_at >= added_from)
         if added_to:
@@ -134,6 +143,8 @@ def list_videos(
         "oldest": (Video.created_at.asc(), Video.id.asc()),
         "name": (func.lower(Video.name).asc(), Video.id.asc()),
         "duration": (Video.duration_s.desc().nulls_last(), Video.id.desc()),
+        # biggest first; videos whose file is already deleted take no space, so they go last
+        "size": (Video.video_removed_at.is_(None).desc(), Video.file_size.desc().nulls_last(), Video.id.desc()),
     }[sort]
     rows = list(db.scalars(joined(select(Video)).where(*conditions(True)).order_by(*order)
                            .limit(page_size).offset((page - 1) * page_size)).all())
@@ -208,9 +219,33 @@ def get_video_ep(video_id: int, db: Session = Depends(get_db), user: User = Depe
 @router.get("/videos/{video_id}/stream")
 def stream(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     v = get_video(db, user, video_id)
+    if v.video_removed_at is not None:
+        raise HTTPException(410, "The video file was deleted")
     if not v.playback_path or not Path(v.playback_path).exists():
         raise HTTPException(409, "Video is not ready")
     return FileResponse(v.playback_path, media_type="video/mp4")  # Starlette handles Range
+
+
+@router.delete("/videos/{video_id}/file", response_model=VideoFileRemovedOut)
+def remove_video_file(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Delete only the video FILES (original and playable copy) to free disk space. The row, marks, Sakshi result and all
+    details stay. Cannot be undone. The files go first: if that fails the database is left untouched, so a retry can finish."""
+    v = get_video(db, user, video_id)
+    if v.video_removed_at is not None:
+        raise HTTPException(409, "The video file was already deleted")
+    if v.status not in ("ready", "partial", "failed"):
+        raise HTTPException(409, "Wait until the video is saved, or stop the recording first")
+    folder = storage.video_path(video_id)
+    freed = storage.dir_size(folder)
+    try:
+        if folder.exists():
+            shutil.rmtree(folder)
+    except OSError as e:
+        raise HTTPException(500, f"Could not delete the video file: {e.strerror or e}") from None
+    v.file_path = v.playback_path = None
+    v.video_removed_at = now()
+    db.commit()
+    return VideoFileRemovedOut(video=with_summary(db, [v])[0], freed_bytes=freed)
 
 
 @router.delete("/videos/{video_id}", status_code=204)

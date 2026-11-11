@@ -22,8 +22,8 @@ with SessionLocal() as db:
     q = select(Video).where(Video.status.in_(["ready", "partial"]),
                             or_(Video.file_size.is_(None), Video.width.is_(None), Video.height.is_(None), Video.vcodec.is_(None)))
     for v in db.scalars(q.order_by(Video.id)):
-        src = Path(v.file_path or "")
-        if not src.exists():
+        src = Path(v.file_path) if v.file_path else None
+        if src is None or not src.is_file():
             print(f"video {v.id} ({v.name}): original file missing, skipped")
             skipped += 1
             continue

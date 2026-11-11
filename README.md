@@ -55,6 +55,9 @@ Search by name, filter by status (chips with counts), source, progress (not star
 Videos created before file size / resolution were stored show "—" there. Fill them in from the files on disk (dry run first, then `--apply`):
 `uv run --project backend python scripts/backfill_video_details.py`. Start and end times of old recordings cannot be recovered.
 
+## Freeing disk space (delete only the video file)
+Each recording is stored twice (the original and the playable copy). On the Videos screen, a row's `⋯` menu has **Delete video file…**: it deletes just those files and keeps the row, marks and counts, the Sakshi result, the comparison, export and all details. It cannot be undone, and it is only offered for finished videos (Ready, Partial, Failed). Sort by **Largest file** to find what to delete. The Count screen of such a video shows a "Video not available" placeholder; existing marks can still be edited or deleted and the Sakshi result entered, but new marks cannot be added. The API is `DELETE /api/videos/{id}/file`; the full **Delete…** still removes everything. Apply the migration with `cd backend && uv run alembic upgrade head`.
+
 ## Player (review-style controls)
 - **Timeline** (under the video): drag to scrub, click a marker to select it, **Ctrl + wheel** zooms, **Shift + wheel** pans, `− + ⤢` buttons. IN markers on the upper row, OUT on the lower; the ring colour is the gender; a diamond means the mark has a point.
 - **Picture zoom:** Ctrl + wheel on the video (up to 8x), drag to pan, **Reset** in the badge.

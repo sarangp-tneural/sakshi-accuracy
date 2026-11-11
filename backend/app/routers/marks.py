@@ -19,6 +19,8 @@ def list_marks(video_id: int, db: Session = Depends(get_db), user: User = Depend
 @router.post("/videos/{video_id}/marks", response_model=MarkOut, status_code=201)
 def create_mark(video_id: int, body: MarkIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     v = get_video(db, user, video_id)
+    if v.video_removed_at is not None:
+        raise HTTPException(409, "The video file was deleted, so new marks cannot be added")
     if v.duration_s is not None and body.time_s > v.duration_s + 1:
         raise HTTPException(422, "time_s is beyond the end of the video")
     m = Mark(video_id=video_id, created_by=user.id, **body.model_dump())

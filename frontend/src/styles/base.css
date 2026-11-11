@@ -224,3 +224,4 @@ a.vname:hover { text-decoration: underline; color: var(--primary); }
 .attnote { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .camnote { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.st-connecting[aria-pressed="false"] { color: var(--warn); }
+.vremoved { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; color: var(--muted, #6b7280); white-space: nowrap; font-size: .75rem; }

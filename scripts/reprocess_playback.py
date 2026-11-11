@@ -28,8 +28,8 @@ with SessionLocal() as db:
     if args:
         q = q.where(Video.id.in_([int(a) for a in args]))
     for v in db.scalars(q):
-        src = Path(v.file_path or "")
-        if not src.exists():
+        src = Path(v.file_path) if v.file_path else None
+        if src is None or not src.is_file():
             print(f"video {v.id}: original missing, skipped")
             continue
         info = media.probe(src)

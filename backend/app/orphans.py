@@ -12,8 +12,8 @@ EMPTY = "The recorder stopped before this recording began, so nothing was record
 
 def settle_orphan(db: Session, v: Video) -> None:
     """Footage on disk is kept (a worker turns it into a playable video); with none the recording is marked failed."""
-    path = Path(v.file_path or "")
-    size = path.stat().st_size if path.exists() else 0
+    path = Path(v.file_path) if v.file_path else None
+    size = path.stat().st_size if path is not None and path.is_file() else 0
     v.ended_at = v.ended_at or now()
     control.clear_stop(v.id)
     if size > 0:

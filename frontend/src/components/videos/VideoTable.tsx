@@ -14,9 +14,10 @@ interface Props {
   onStop: (v: Video) => void;
   onExport: (v: Video) => void;
   onDelete: (v: Video) => void;
+  onRemoveFile: (v: Video) => void;
 }
 
-export default function VideoTable({ items, uploads, now, dim, onCancelUpload, onOpen, onStop, onExport, onDelete }: Props) {
+export default function VideoTable({ items, uploads, now, dim, onCancelUpload, onOpen, onStop, onExport, onDelete, onRemoveFile }: Props) {
   const [open, setOpen] = useState<Set<number>>(new Set());
   const toggle = (id: number) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   return (
@@ -33,7 +34,7 @@ export default function VideoTable({ items, uploads, now, dim, onCancelUpload, o
         <tbody>
           <UploadRows items={uploads} cols={COLS} onCancel={onCancelUpload} />
           {items.map((v) => (
-            <VideoRow key={v.id} v={v} now={now} expanded={open.has(v.id)} onToggle={toggle} onOpen={onOpen} onStop={onStop} onExport={onExport} onDelete={onDelete} />
+            <VideoRow key={v.id} v={v} now={now} expanded={open.has(v.id)} onToggle={toggle} onOpen={onOpen} onStop={onStop} onExport={onExport} onDelete={onDelete} onRemoveFile={onRemoveFile} />
           ))}
         </tbody>
       </table>

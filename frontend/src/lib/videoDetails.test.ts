@@ -142,3 +142,13 @@ describe("videoDetails: RTSP recordings", () => {
     expect(get(d, "Recorded")?.value).toBe("05:00 of 05:00 planned");
   });
 });
+
+describe("videoDetails: file deleted", () => {
+  it("says the file was deleted and keeps the original size as history", () => {
+    const d = videoDetails({ ...base, video_removed_at: "2026-11-11T10:00:00Z" }, 0);
+    expect(get(d, "Video file")?.value).toMatch(/^deleted on .* to free space$/);
+    expect(get(d, "Original size")?.value).toBe("38.6 MB");
+    expect(get(d, "File size")).toBeUndefined();
+    expect(get(videoDetails(base, 0), "Video file")).toBeUndefined();
+  });
+});

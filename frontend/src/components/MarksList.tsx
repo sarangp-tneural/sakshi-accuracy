@@ -21,10 +21,11 @@ interface Props {
   onClearPoint: (m: M) => void;
   onReplay: (m: M) => void;
   onDone: () => void; // hand focus back to the player
+  noVideo?: boolean; // the video file was deleted: no jumping, replaying or placing points
 }
 
 /** Windowed list: only the visible rows exist in the DOM, so 5,000 marks stay fast. */
-function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay, onDone }: Props) {
+function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay, onDone, noVideo = false }: Props) {
   const sorted = useMemo(() => newestFirst(marks), [marks]);
   const box = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -56,11 +57,11 @@ function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, o
   return (
     <div className="marks-scroll" ref={box} role="list" aria-label="Marks, newest first"
       onScroll={(e) => { const t = e.currentTarget.scrollTop; cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(() => setScrollTop(t)); }}>
-      {!sorted.length && <div className="empty small">No marks yet. Press a counting key while the video plays.</div>}
+      {!sorted.length && <div className="empty small">{noVideo ? "No marks." : "No marks yet. Press a counting key while the video plays."}</div>}
       <div style={{ height: sorted.length * ROW_H, position: "relative" }}>
         {sorted.slice(start, end).map((m, i) => (
           <MarkRow key={m.id} m={m} top={(start + i) * ROW_H} current={m.id === currentId} selected={m.id === selectedId} picking={m.id === pickingId}
-            editing={editing === m.id}
+            editing={editing === m.id} noVideo={noVideo}
             onEdit={() => setEditing(m.id)}
             onCancel={() => { setEditing(null); onDone(); }}
             onSave={(p) => { setEditing(null); onPatch(m, p); onDone(); }}
@@ -72,13 +73,13 @@ function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, o
 }
 
 interface RowProps {
-  m: M; top: number; current: boolean; selected: boolean; picking: boolean; editing: boolean;
+  m: M; top: number; current: boolean; selected: boolean; picking: boolean; editing: boolean; noVideo: boolean;
   onEdit: () => void; onCancel: () => void; onSave: (p: MarkPatch) => void;
   onSeek: Props["onSeek"]; onPatch: Props["onPatch"]; onDelete: Props["onDelete"];
   onPlacePoint: Props["onPlacePoint"]; onClearPoint: Props["onClearPoint"]; onReplay: Props["onReplay"];
 }
 
-const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, editing, onEdit, onCancel, onSave, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay }: RowProps) {
+const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, editing, noVideo, onEdit, onCancel, onSave, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay }: RowProps) {
   const [dir, setDir] = useState(m.direction);
   const [gen, setGen] = useState(m.gender);
   const [t, setT] = useState(m.time_s.toFixed(2));
@@ -103,7 +104,7 @@ const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, edit
   const dis = m.pending;
   return (
     <div className={`mrow ${current ? "current" : ""} ${selected ? "selected" : ""} ${picking ? "picking" : ""} ${m.pending ? "pending" : ""}`} style={style} role="listitem" aria-current={current || undefined}>
-      <button className="seeklink num" onClick={() => onSeek(m)} title="Jump to this mark">{fmtTime(m.time_s)}</button>
+      {noVideo ? <span className="num">{fmtTime(m.time_s)}</span> : <button className="seeklink num" onClick={() => onSeek(m)} title="Jump to this mark">{fmtTime(m.time_s)}</button>}
       <DirBadge d={m.direction} />
       <GenderBadge g={m.gender} />
       {hasPoint && <span className="pin" title="Has a point on the picture" aria-label="Has a point">📍</span>}
@@ -111,9 +112,9 @@ const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, edit
       <div className="mactions">
         <Button size="sm" variant="ghost" disabled={dis} onClick={() => onPatch(m, { time_s: Math.max(0, +(m.time_s - 0.1).toFixed(3)) })} aria-label="Nudge 0.1 seconds earlier" title="−0.1 s">−</Button>
         <Button size="sm" variant="ghost" disabled={dis} onClick={() => onPatch(m, { time_s: +(m.time_s + 0.1).toFixed(3) })} aria-label="Nudge 0.1 seconds later" title="+0.1 s">+</Button>
-        <Button size="sm" variant="ghost" disabled={dis} onClick={() => onReplay(m)} aria-label="Replay around this mark" title="Replay ±2 s">▶</Button>
-        <Button size="sm" variant="ghost" disabled={dis} onClick={() => onPlacePoint(m)} aria-label={hasPoint ? "Move point" : "Place point on the picture"} title={hasPoint ? "Move point" : "Place point"}>📍</Button>
-        {hasPoint && <Button size="sm" variant="ghost" disabled={dis} onClick={() => onClearPoint(m)} aria-label="Clear point" title="Clear point">⌀</Button>}
+        {!noVideo && <Button size="sm" variant="ghost" disabled={dis} onClick={() => onReplay(m)} aria-label="Replay around this mark" title="Replay ±2 s">▶</Button>}
+        {!noVideo && <Button size="sm" variant="ghost" disabled={dis} onClick={() => onPlacePoint(m)} aria-label={hasPoint ? "Move point" : "Place point on the picture"} title={hasPoint ? "Move point" : "Place point"}>📍</Button>}
+        {hasPoint && !noVideo && <Button size="sm" variant="ghost" disabled={dis} onClick={() => onClearPoint(m)} aria-label="Clear point" title="Clear point">⌀</Button>}
         <Button size="sm" variant="ghost" disabled={dis} onClick={onEdit} aria-label="Edit mark" title="Edit">✎</Button>
         <Button size="sm" variant="ghost" disabled={dis} onClick={() => onDelete(m)} aria-label="Delete mark" title="Delete">✕</Button>
       </div>
