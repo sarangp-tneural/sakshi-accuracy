@@ -62,6 +62,7 @@ export interface Sakshi { in_count: number | null; out_count: number | null; mal
 export interface UserSettings { reaction_delay_s: number; sound_enabled: boolean; slow_after_jump: boolean; key_bindings: Bindings }
 
 export const api = {
+  me: () => req<{ id: number; email: string }>("/auth/me"),
   login: (email: string, password: string) => req<{ token: string }>("/auth/login", { method: "POST", body: body({ email, password }) }),
   projects: () => req<Project[]>("/projects"),
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: body({ name }) }),

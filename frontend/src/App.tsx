@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { getToken, setToken } from "./api";
+import { api, getToken, setToken } from "./api";
 import Login from "./pages/Login";
 import Projects from "./pages/Projects";
 import ProjectPage from "./pages/ProjectPage";
@@ -12,13 +13,19 @@ function Guard({ children }: { children: React.ReactElement }) {
 }
 
 export default function App() {
+  const [email, setEmail] = useState("");
+  const authed = !!getToken();
+  useEffect(() => { if (authed) api.me().then((m) => setEmail(m.email)).catch(() => {}); }, [authed]);
   return (
     <ToastProvider>
       <ErrorBoundary>
         {getToken() && (
           <header className="topbar">
             <Link to="/">Sakshi Verify</Link>
-            <button className="btn sm" onClick={() => { setToken(null); location.href = "/login"; }}>Log out</button>
+            <div className="profile">
+              {email && <span className="profile-email" title={email}>{email}</span>}
+              <button className="btn sm" onClick={() => { setToken(null); location.href = "/login"; }}>Log out</button>
+            </div>
           </header>
         )}
         <Routes>
