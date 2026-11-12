@@ -6,11 +6,17 @@ const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:n
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Callers pass inline arrows (a new function every render). Keep the latest in a ref so the effect below runs
+  // only when the dialog opens/closes; otherwise every keystroke re-ran it and moved focus to the close button.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    const root = ref.current;
+    (root?.querySelector<HTMLElement>("input:not(:disabled), textarea:not(:disabled), select:not(:disabled)")
+      ?? root?.querySelector<HTMLElement>(FOCUSABLE))?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !capture.active) { e.stopPropagation(); onClose(); return; }
+      if (e.key === "Escape" && !capture.active) { e.stopPropagation(); closeRef.current(); return; }
       if (e.key !== "Tab" || !ref.current) return;
       const f = [...ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
       if (!f.length) return;
@@ -20,7 +26,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     };
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); prev?.focus?.(); };
-  }, [onClose]);
+  }, []);
   return (
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
