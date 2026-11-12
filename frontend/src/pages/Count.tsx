@@ -6,6 +6,7 @@ import { COUNT_ACTIONS, SPEEDS } from "../keys/registry";
 import { capture } from "../keys/capture";
 import { decideKey, nextRepeat } from "../lib/keyEvents";
 import { markTime } from "../lib/reaction";
+import type { VirtualLine } from "../lib/lines";
 import { fmtTime } from "../lib/format";
 import { nearestIndex } from "../lib/nearest";
 import { shouldRefocus, useShortcutsPaused } from "../lib/useShortcutState";
@@ -24,6 +25,7 @@ import GoToTime from "../components/GoToTime";
 import SettingsDrawer from "../components/SettingsDrawer";
 import ExportDialog from "../components/ExportDialog";
 import VideoUnavailable from "../components/VideoUnavailable";
+import LinesPanel from "../components/lines/LinesPanel";
 
 type LocalMark = Mark & { pending?: boolean };
 let tempId = -1;
@@ -59,6 +61,27 @@ export default function Count() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pickFor, setPickFor] = useState<number | null>(null);
   const [showPoints, setShowPoints] = useState(() => { try { return localStorage.getItem("sv_points") !== "0"; } catch { return true; } });
+  // virtual lines: shown on the video always, editable here (this video only; the camera and other videos are not touched)
+  const [lines, setLines] = useState<VirtualLine[]>([]);
+  const [editLines, setEditLines] = useState(false);
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [linesSaving, setLinesSaving] = useState<"idle" | "saving" | "error">("idle");
+  const pendingLines = useRef<VirtualLine[] | null>(null);
+  const linesTimer = useRef<number | undefined>(undefined);
+  const flushLines = useCallback(() => {
+    window.clearTimeout(linesTimer.current);
+    const next = pendingLines.current; if (!next) return Promise.resolve();
+    pendingLines.current = null;
+    setLinesSaving("saving");
+    return api.putVideoLines(id, next).then(() => setLinesSaving((s) => (pendingLines.current ? s : "idle"))).catch((e) => { setLinesSaving("error"); toast.error(e); });
+  }, [id, toast]);
+  const changeLines = useCallback((next: VirtualLine[]) => {
+    setLines(next);
+    pendingLines.current = next;
+    window.clearTimeout(linesTimer.current);
+    linesTimer.current = window.setTimeout(() => void flushLines(), 500); // typing a name sends once, not per key
+  }, [flushLines]);
+  useEffect(() => () => { void flushLines(); }, [flushLines]); // leaving the page saves what is pending
   const vref = useRef<HTMLVideoElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [muted, setMuted] = useState(() => { try { return localStorage.getItem("sv_video_muted") === "1"; } catch { return false; } });
@@ -92,7 +115,7 @@ export default function Count() {
   const fetchAll = useCallback(() => {
     setLoad("loading");
     Promise.all([api.video(id), api.marks(id)])
-      .then(([v, m]) => { setVideo(v); setMarks(m); setDuration(v.duration_s ?? 0); setLoad("ok"); api.projects().then((ps) => setProjectName(ps.find((p) => p.id === v.project_id)?.name ?? "")).catch(() => {}); })
+      .then(([v, m]) => { setVideo(v); setLines(v.lines ?? []); setMarks(m); setDuration(v.duration_s ?? 0); setLoad("ok"); api.projects().then((ps) => setProjectName(ps.find((p) => p.id === v.project_id)?.name ?? "")).catch(() => {}); })
       .catch((e) => { setLoadErr(e.message); setLoad("error"); });
   }, [id]);
   useEffect(fetchAll, [fetchAll]);
@@ -311,6 +334,9 @@ export default function Count() {
                 {!noVideo && <Button size="sm" variant="ghost" aria-pressed={showPoints} title="Show points on the video"
                   onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>
                   <span aria-hidden>📍</span><span className="tl-label"> Points</span></Button>}
+                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editLines} title="Draw or edit the virtual lines on this video"
+                  onClick={() => { setEditLines((e) => !e); setSelectedLineId(null); setTimeout(focusStage, 0); }}>
+                  <span aria-hidden>📏</span><span className="tl-label"> Lines{lines.length ? ` (${lines.length})` : ""}</span></Button>}
                 <Button size="sm" variant="ghost" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)}
                   title="Beep on each mark (not the video audio)"><span aria-hidden>{settings.sound_enabled ? "🔔" : "🔕"}</span><span className="tl-label"> Click sound</span></Button>
               </div>
@@ -326,6 +352,7 @@ export default function Count() {
           ) : (<>
           <VideoViewport ref={viewport} videoRef={vref} stageRef={stage} src={streamUrl(id)} fps={video.fps}
             points={pointMarks} selectedId={selectedId} showPoints={showPoints} muted={muted} pickMode={pickFor !== null}
+            lines={lines} editLines={editLines && pickFor === null} selectedLineId={selectedLineId} onSelectLine={setSelectedLineId} onLinesChange={changeLines}
             onPick={placePoint} onToggle={togglePlay}
             onLoadedMetadata={(v) => { if (v.duration) setDuration(v.duration); }}
             onPlay={() => setPlaying(true)} onPause={() => { stopAt.current = null; setPlaying(false); }}>
@@ -339,6 +366,12 @@ export default function Count() {
 
         <aside className="side">
           <Counters ref={counters} counts={counts} />
+          {editLines && !noVideo && (
+            <section className="card">
+              <h3>Lines <span className="small muted">{linesSaving === "saving" ? "saving…" : linesSaving === "error" ? "not saved" : "saved"}</span></h3>
+              <LinesPanel lines={lines} selectedId={selectedLineId} onSelect={setSelectedLineId} onChange={changeLines} />
+            </section>
+          )}
           <section className="card marks">
             <h3>Marks ({marks.length}) <span className="small muted">newest first</span></h3>
             <MarksList marks={marks} currentId={nearestId} selectedId={selectedId} pickingId={pickFor}

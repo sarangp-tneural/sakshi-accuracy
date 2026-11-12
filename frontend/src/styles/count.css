@@ -125,3 +125,17 @@
 .vunavail.compact .vu-art { width: 90px; }
 .count-notice { padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: rgba(255,255,255,.06); font-size: .85rem; }
 @media (max-width: 900px) { .vunavail { aspect-ratio: 16 / 9; flex: none; } }
+
+/* ---- virtual lines ---- */
+.lines-overlay { position: absolute; z-index: 4; pointer-events: none; overflow: visible; touch-action: none; }
+.lines-overlay.editing { pointer-events: auto; cursor: crosshair; }
+.lines-label { font: 700 12px system-ui, sans-serif; }
+.img-lines { position: relative; display: inline-block; max-width: 640px; width: 100%; line-height: 0; }
+.img-lines .rtsp-frame { max-width: 100%; }
+.lines-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.lines-list li { display: flex; align-items: center; gap: var(--s-2); padding: 4px; border-radius: var(--r-md); border: 1px solid transparent; }
+.lines-list li.sel { border-color: var(--focus); }
+.lines-list input[type="text"] { flex: 1; min-width: 0; }
+.swatches { display: inline-flex; gap: 4px; }
+.swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; outline: 1px solid var(--border); cursor: pointer; padding: 0; }
+.swatch.on { border-color: var(--text, #fff); }

@@ -4,7 +4,9 @@ import { medianGap, plausibleFrameGap, stepTarget } from "../lib/frameStep";
 import { visibleSlice } from "../lib/timelineView";
 import { useTick } from "../lib/useTick";
 import { IDENTITY, panBy, zoomAt, type Transform } from "../lib/viewport";
+import { overlayRect, type VirtualLine } from "../lib/lines";
 import { Button } from "./ui/bits";
+import LinesOverlay from "./lines/LinesOverlay";
 
 export interface PointMark { id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number; y: number }
 export interface ViewportHandle { step: (dir: 1 | -1, frames?: number) => void }
@@ -19,6 +21,11 @@ interface Props {
   showPoints: boolean;
   muted: boolean;
   pickMode: boolean;
+  lines: VirtualLine[]; // always drawn
+  editLines: boolean; // when on, dragging on the picture draws / edits lines instead of play + pan
+  selectedLineId: string | null;
+  onSelectLine: (id: string | null) => void;
+  onLinesChange: (lines: VirtualLine[]) => void;
   onPick: (x: number, y: number) => void;
   onToggle: () => void; // plain click on the picture: play / pause
   onLoadedMetadata: (v: HTMLVideoElement) => void;
@@ -32,10 +39,16 @@ const DRAG_PX = 4;
 
 /** The stage: video (zoom 1x-8x with Ctrl+wheel, drag to pan), crisp overlay for points, click-to-pick, frame stepping. */
 const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
-  { videoRef, stageRef, src, fps, points, selectedId, showPoints, muted, pickMode, onPick, onToggle, onLoadedMetadata, onPlay, onPause, children }, handle) {
+  { videoRef, stageRef, src, fps, points, selectedId, showPoints, muted, pickMode, lines, editLines, selectedLineId, onSelectLine, onLinesChange, onPick, onToggle, onLoadedMetadata, onPlay, onPause, children }, handle) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [tr, setTr] = useState<Transform>(IDENTITY);
   const trRef = useRef(tr); trRef.current = tr;
+  const [layout, setLayout] = useState({ w: 0, h: 0, vw: 0, vh: 0 }); // stage and video size, to place the lines overlay
+  const syncLayout = useCallback(() => {
+    const st = stageRef.current, v = videoRef.current; if (!st) return;
+    setLayout((o) => (o.w === st.clientWidth && o.h === st.clientHeight && o.vw === (v?.videoWidth ?? 0) && o.vh === (v?.videoHeight ?? 0)
+      ? o : { w: st.clientWidth, h: st.clientHeight, vw: v?.videoWidth ?? 0, vh: v?.videoHeight ?? 0 }));
+  }, [stageRef, videoRef]);
   const drag = useRef<{ x: number; y: number; sx: number; sy: number; moved: boolean } | null>(null);
   const live = useRef({ points, selectedId, showPoints, pickMode, onPick, onToggle, fps });
   live.current = { points, selectedId, showPoints, pickMode, onPick, onToggle, fps };
@@ -158,12 +171,13 @@ const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
       const get = (n: string, d: string) => cs.getPropertyValue(n).trim() || d;
       colors.current = { in: get("--in", "#6ea8fe"), out: get("--out", "#fb923c"), male: get("--male", "#b79df0"), female: get("--female", "#34d3a4"), unknown: get("--unknown", "#9aa4b0") };
       dirty.current = true;
+      syncLayout();
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(st);
     return () => ro.disconnect();
-  }, [stageRef]);
+  }, [stageRef, syncLayout]);
   useEffect(() => { dirty.current = true; }, [points, selectedId, showPoints, tr]);
 
   useTick(() => {
@@ -205,13 +219,17 @@ const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
   }, 33);
 
   return (
-    <div className={`stage ${pickMode ? "picking" : tr.scale > 1 ? "zoomed" : ""}`} ref={stageRef} tabIndex={-1} aria-label="Video player"
+    <div className={`stage ${pickMode ? "picking" : editLines ? "linedit" : tr.scale > 1 ? "zoomed" : ""}`} ref={stageRef} tabIndex={-1} aria-label="Video player"
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; }}>
       <div className="vlayer" style={{ transform: `translate(${tr.tx}px, ${tr.ty}px) scale(${tr.scale})` }}>
         <video ref={videoRef} src={src} preload="auto" playsInline muted={muted}
-          onLoadedMetadata={(e) => { onLoadedMetadata(e.currentTarget); dirty.current = true; }} onSeeked={finishSeek} onPlay={onPlay} onPause={onPause} />
+          onLoadedMetadata={(e) => { onLoadedMetadata(e.currentTarget); dirty.current = true; syncLayout(); }} onSeeked={finishSeek} onPlay={onPlay} onPause={onPause} />
       </div>
       <canvas ref={canvas} className="overlay" aria-hidden />
+      {layout.vw > 0 && (lines.length > 0 || editLines) && (
+        <LinesOverlay lines={lines} editing={editLines} selectedId={selectedLineId} onSelect={onSelectLine} onChange={onLinesChange}
+          box={overlayRect(containRect(layout.w, layout.h, layout.vw, layout.vh), tr)} />
+      )}
       {pickMode && <div className="pickbanner" role="status">📍 Click where this person is · Esc to cancel</div>}
       {tr.scale > 1 && (
         <div className="zoombadge" data-ui>

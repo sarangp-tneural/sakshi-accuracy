@@ -1,3 +1,5 @@
+import copy
+
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -10,7 +12,7 @@ from ..db import get_db
 from ..deps import current_user, get_camera, get_project
 from ..models import Camera, User, Video
 from ..recording import start_recording
-from ..schemas import CameraIn, CameraOut, CameraPatch, RecordCameraIn, VideoOut
+from ..schemas import CameraIn, CameraOut, CameraPatch, LinesIn, RecordCameraIn, VideoOut
 
 router = APIRouter(tags=["cameras"])
 
@@ -45,7 +47,7 @@ def _saved_link(c: Camera) -> str:
 
 def _out(db: Session, cams: list[Camera]) -> list[CameraOut]:
     outs = [CameraOut(id=c.id, project_id=c.project_id, name=c.name, rtsp_url_masked=c.rtsp_url_masked,
-                      default_minutes=c.default_minutes, created_at=c.created_at) for c in cams]
+                      default_minutes=c.default_minutes, created_at=c.created_at, lines=c.lines or []) for c in cams]
     if not outs:
         return outs
     by_id = {o.id: o for o in outs}
@@ -112,6 +114,15 @@ def patch_camera(camera_id: int, body: CameraPatch, db: Session = Depends(get_db
     return _out(db, [c])[0]
 
 
+@router.put("/cameras/{camera_id}/lines", response_model=CameraOut)
+def put_camera_lines(camera_id: int, body: LinesIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Replace the camera's lines. Only recordings started afterwards get them; existing videos keep their own."""
+    c = get_camera(db, user, camera_id)
+    c.lines = [ln.model_dump() for ln in body.lines]
+    db.commit()
+    return _out(db, [c])[0]
+
+
 @router.delete("/cameras/{camera_id}", status_code=204)
 def delete_camera(camera_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Recordings already made are kept (they just lose the link to the camera)."""
@@ -133,7 +144,8 @@ def record_camera(camera_id: int, body: RecordCameraIn | None = None, db: Sessio
         link = _saved_link(c)
         stamp = func.to_char(func.now(), "YYYY-MM-DD HH24:MI")  # name like "Entrance 2026-11-10 18:17"
         label = db.scalar(select(stamp))
-        return start_recording(db, project_id=c.project_id, url=link, minutes=minutes, name=f"{c.name} {label}", camera_id=c.id)
+        return start_recording(db, project_id=c.project_id, url=link, minutes=minutes, name=f"{c.name} {label}", camera_id=c.id,
+                               lines=copy.deepcopy(c.lines or []))
     except HTTPException:
         db.rollback()
         raise

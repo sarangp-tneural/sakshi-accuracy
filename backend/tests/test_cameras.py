@@ -236,3 +236,48 @@ def test_the_one_off_record_endpoint_still_works(client, auth, pid, queued):
     assert r.status_code == 201 and r.json()["camera_id"] is None and r.json()["rtsp_minutes"] == 5 and "s3cret" not in r.text
     assert client.post(f"/api/projects/{pid}/videos/rtsp", json={"url": "http://x", "minutes": 5}, headers=auth).status_code == 422
     assert client.post(f"/api/projects/{pid}/videos/rtsp", json={"url": URL, "minutes": 500}, headers=auth).status_code == 422
+
+
+# ---- virtual lines ----
+def line(i="a", **o):
+    return {"id": i, "name": "Entry", "x1": 0.1, "y1": 0.5, "x2": 0.9, "y2": 0.5, "color": "#ffcc00", **o}
+
+
+def test_camera_lines_save_and_come_back(client, auth, pid):
+    cid = make(client, auth, pid).json()["id"]
+    assert client.get(f"/api/projects/{pid}/cameras", headers=auth).json()[0]["lines"] == []
+    r = client.put(f"/api/cameras/{cid}/lines", json={"lines": [line("a"), line("b", name="Exit")]}, headers=auth)
+    assert r.status_code == 200 and [x["id"] for x in r.json()["lines"]] == ["a", "b"]
+    assert len(client.get(f"/api/projects/{pid}/cameras", headers=auth).json()[0]["lines"]) == 2
+    assert client.put(f"/api/cameras/{cid}/lines", json={"lines": []}, headers=auth).json()["lines"] == []
+
+
+@pytest.mark.parametrize("bad", [line(x1=1.2), line(y2=-0.1), line(color="red"), line(name="x" * 41), line(i="")])
+def test_lines_are_validated(client, auth, pid, bad):
+    cid = make(client, auth, pid).json()["id"]
+    assert client.put(f"/api/cameras/{cid}/lines", json={"lines": [bad]}, headers=auth).status_code == 422
+
+
+def test_too_many_lines_rejected(client, auth, pid):
+    cid = make(client, auth, pid).json()["id"]
+    assert client.put(f"/api/cameras/{cid}/lines", json={"lines": [line(str(i)) for i in range(21)]}, headers=auth).status_code == 422
+
+
+def test_lines_of_someone_elses_camera_are_404(client, auth, pid):
+    cid = make(client, auth, pid).json()["id"]
+    _, other = make_user("other@x.com")
+    assert client.put(f"/api/cameras/{cid}/lines", json={"lines": []}, headers=other).status_code == 404
+
+
+def test_recording_copies_camera_lines_and_they_then_edit_independently(client, auth, pid, queued):
+    cid = make(client, auth, pid).json()["id"]
+    client.put(f"/api/cameras/{cid}/lines", json={"lines": [line("a")]}, headers=auth)
+    vid = client.post(f"/api/cameras/{cid}/record", headers=auth).json()["id"]
+    assert client.get(f"/api/videos/{vid}", headers=auth).json()["lines"][0]["id"] == "a"
+    # editing the video leaves the camera alone
+    r = client.put(f"/api/videos/{vid}/lines", json={"lines": [line("a", name="Moved", x1=0.3)]}, headers=auth)
+    assert r.status_code == 200 and r.json()["lines"][0]["name"] == "Moved"
+    assert client.get(f"/api/projects/{pid}/cameras", headers=auth).json()[0]["lines"][0]["name"] == "Entry"
+    # editing the camera later leaves the video alone
+    client.put(f"/api/cameras/{cid}/lines", json={"lines": []}, headers=auth)
+    assert client.get(f"/api/videos/{vid}", headers=auth).json()["lines"][0]["name"] == "Moved"

@@ -16,7 +16,7 @@ from ..db import get_db
 from ..deps import current_user, get_project, get_video
 from ..models import Camera, Mark, SakshiResult, User, Video, now
 from ..sql import sakshi_has_value
-from ..schemas import RtspIn, RtspPreviewIn, VideoFileRemovedOut, VideoListOut, VideoOut
+from ..schemas import LinesIn, RtspIn, RtspPreviewIn, VideoFileRemovedOut, VideoListOut, VideoOut
 
 router = APIRouter(tags=["videos"])
 
@@ -214,6 +214,15 @@ def stop_recording(video_id: int, db: Session = Depends(get_db), user: User = De
 @router.get("/videos/{video_id}", response_model=VideoOut)
 def get_video_ep(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     return with_summary(db, [get_video(db, user, video_id)])[0]
+
+
+@router.put("/videos/{video_id}/lines", response_model=VideoOut)
+def put_video_lines(video_id: int, body: LinesIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Replace this video's lines (the camera and other videos are not touched)."""
+    v = get_video(db, user, video_id)
+    v.lines = [ln.model_dump() for ln in body.lines]
+    db.commit()
+    return with_summary(db, [v])[0]
 
 
 @router.get("/videos/{video_id}/stream")

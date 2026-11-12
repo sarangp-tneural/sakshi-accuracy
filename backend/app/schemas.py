@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -37,6 +37,25 @@ class ProjectOut(BaseModel):
     last_activity_at: datetime | None = None  # newest of: project created, video added, mark counted
 
 
+MAX_LINES = 20
+Unit = Annotated[float, Field(ge=0, le=1)]
+
+
+class VirtualLine(BaseModel):
+    """A reference line on the picture, in normalised 0..1 frame coordinates."""
+    id: str = Field(min_length=1, max_length=40)
+    name: str = Field(default="", max_length=40)
+    x1: Unit
+    y1: Unit
+    x2: Unit
+    y2: Unit
+    color: str = Field(default="#ffcc00", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class LinesIn(BaseModel):
+    lines: list[VirtualLine] = Field(max_length=MAX_LINES)
+
+
 class VideoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -68,6 +87,7 @@ class VideoOut(BaseModel):
     camera_name: str | None = None
     video_removed_at: datetime | None = None  # the video file was deleted to free space; everything else stays
     disk_bytes: int | None = None  # what the video files take on disk now (None once removed or if there are none)
+    lines: list[VirtualLine] = []
 
 
 class VideoFileRemovedOut(BaseModel):
@@ -103,6 +123,7 @@ class CameraOut(BaseModel):
     rtsp_url_masked: str  # the real link is never returned
     default_minutes: int
     created_at: datetime
+    lines: list[VirtualLine] = []
     last_recorded_at: datetime | None = None
     recording_video_id: int | None = None  # the recording (or attempt) in progress, if any
     recording_status: str | None = None  # "connecting" (attempting) or "recording"

@@ -44,6 +44,8 @@ class Camera(Base):
     rtsp_url_enc: Mapped[str] = mapped_column(Text)
     rtsp_url_masked: Mapped[str] = mapped_column(Text)
     default_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    # virtual reference lines drawn on the view; copied into each video recorded from this camera
+    lines: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -76,6 +78,8 @@ class Video(Base):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vcodec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # virtual reference lines (normalised 0..1); start as a copy of the camera's, then edited per video
+    lines: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     marks: Mapped[list["Mark"]] = relationship(cascade="all, delete-orphan", order_by="Mark.time_s")
 

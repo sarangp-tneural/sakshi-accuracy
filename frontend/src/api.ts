@@ -1,4 +1,5 @@
 import type { Bindings } from "./keys/registry";
+import type { VirtualLine } from "./lib/lines";
 
 const TOKEN_KEY = "sv_token";
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -46,11 +47,13 @@ export interface Video {
   width: number | null; height: number | null; vcodec: string | null;
   mark_total: number; mark_in: number; mark_out: number; mark_male: number; mark_female: number; mark_unknown: number; sakshi_entered: boolean; camera_id: number | null; camera_name: string | null;
   video_removed_at?: string | null; disk_bytes?: number | null; // set once only the video FILE was deleted
+  lines: VirtualLine[];
 }
 export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number | null; y: number | null }
 export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
 export interface Camera {
   id: number; project_id: number; name: string; rtsp_url_masked: string; default_minutes: number; created_at: string;
+  lines: VirtualLine[];
   last_recorded_at: string | null; recording_video_id: number | null; recording_status: "connecting" | "recording" | null; recording_note: string | null; recording_started_at: string | null; recording_created_at: string | null; recording_minutes: number | null;
 }
 export interface VideoList {
@@ -78,6 +81,8 @@ export const api = {
   cameras: (pid: number) => req<Camera[]>(`/projects/${pid}/cameras`),
   createCamera: (pid: number, c: { name: string; url: string; default_minutes: number }) => req<Camera>(`/projects/${pid}/cameras`, { method: "POST", body: body(c) }),
   updateCamera: (id: number, c: { name?: string; url?: string; default_minutes?: number }) => req<Camera>(`/cameras/${id}`, { method: "PATCH", body: body(c) }),
+  putCameraLines: (id: number, lines: VirtualLine[]) => req<Camera>(`/cameras/${id}/lines`, { method: "PUT", body: body({ lines }) }),
+  putVideoLines: (id: number, lines: VirtualLine[]) => req<Video>(`/videos/${id}/lines`, { method: "PUT", body: body({ lines }) }),
   deleteCamera: (id: number) => req<void>(`/cameras/${id}`, { method: "DELETE" }),
   recordCamera: (id: number, minutes?: number) => req<Video>(`/cameras/${id}/record`, { method: "POST", body: body(minutes === undefined ? {} : { minutes }) }),
   stopRecording: (id: number) => req<Video>(`/videos/${id}/stop`, { method: "POST" }),

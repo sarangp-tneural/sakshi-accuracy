@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, cameraPreview, rtspPreview, type Camera } from "../../api";
+import type { VirtualLine } from "../../lib/lines";
 import { MAX_NAME, QUICK_MINUTES, validateCamera } from "../../lib/cameras";
 import { MAX_MINUTES, validateRtsp } from "../../lib/rtsp";
 import { Button, Field } from "../ui/bits";
@@ -15,6 +16,7 @@ export default function CameraDialog({ projectId, camera, onSaved, onClose }: { 
   const [changeLink, setChangeLink] = useState(!editing);
   const [minutesText, setMinutesText] = useState(String(camera?.default_minutes ?? 30));
   const minutes = minutesText.trim() === "" ? NaN : Number(minutesText);
+  const [lines, setLines] = useState<VirtualLine[]>(camera?.lines ?? []);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [nameErr, setNameErr] = useState("");
@@ -32,8 +34,10 @@ export default function CameraDialog({ projectId, camera, onSaved, onClose }: { 
     try {
       if (camera) {
         await api.updateCamera(camera.id, { name: name.trim(), default_minutes: minutes, ...(changeLink && url.trim() ? { url: url.trim() } : {}) });
+        if (JSON.stringify(lines) !== JSON.stringify(camera.lines ?? [])) await api.putCameraLines(camera.id, lines);
       } else {
-        await api.createCamera(projectId, { name: name.trim(), url: url.trim(), default_minutes: minutes });
+        const created = await api.createCamera(projectId, { name: name.trim(), url: url.trim(), default_minutes: minutes });
+        if (lines.length) await api.putCameraLines(created.id, lines);
       }
       toast.success(editing ? "Camera updated" : "Camera saved");
       onSaved(); onClose();
@@ -80,7 +84,7 @@ export default function CameraDialog({ projectId, camera, onSaved, onClose }: { 
 
         <CameraPreview
           fetcher={(signal) => (usingSaved ? cameraPreview(camera!.id, signal) : rtspPreview(projectId, url.trim(), signal))}
-          enabled={usingSaved || !validateRtsp(url, 1).url} />
+          enabled={usingSaved || !validateRtsp(url, 1).url} lines={lines} onLinesChange={setLines} />
         {serverErr && <p className="alert" role="alert">{serverErr}</p>}
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <Button onClick={onClose}>Cancel</Button>
