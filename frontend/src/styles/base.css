@@ -227,3 +227,9 @@ a.vname:hover { text-decoration: underline; color: var(--primary); }
 .vremoved { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; color: var(--muted, #6b7280); white-space: nowrap; font-size: .75rem; }
 .profile { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .profile-email { color: var(--muted); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.pcard-wrap { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.pcard-wrap > .pcard { flex: 1; }
+.pc-del { position: absolute; top: var(--s-3); right: var(--s-3); width: 30px; height: 30px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; cursor: pointer; opacity: 0; font-size: 14px; }
+.pcard-wrap:hover .pc-del, .pc-del:focus-visible { opacity: 1; }
+.pc-del:hover { background: var(--surface-2); border-color: var(--border); }
+.pcard-wrap:hover .pc-open { opacity: 0; }

@@ -65,6 +65,7 @@ export const api = {
   me: () => req<{ id: number; email: string }>("/auth/me"),
   login: (email: string, password: string) => req<{ token: string }>("/auth/login", { method: "POST", body: body({ email, password }) }),
   projects: () => req<Project[]>("/projects"),
+  deleteProject: (id: number) => req<void>(`/projects/${id}`, { method: "DELETE" }),
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: body({ name }) }),
   videos: (pid: number, params: URLSearchParams, signal?: AbortSignal) => req<VideoList>(`/projects/${pid}/videos?${params.toString()}`, { signal }),
   video: (id: number) => req<Video>(`/videos/${id}`),

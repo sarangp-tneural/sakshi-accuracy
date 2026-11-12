@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import case, func, select
+import shutil
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
+from .. import control, liveness, worker
+from ..config import settings
 from ..db import get_db
-from ..deps import current_user
+from ..deps import current_user, get_project
 from ..models import Camera, Mark, Project, SakshiResult, User, Video
 from ..schemas import ProjectIn, ProjectOut
 from ..sql import sakshi_has_value
@@ -72,3 +76,27 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = 
     db.add(p)
     db.commit()
     return with_summary(db, [p])[0]
+
+
+@router.delete("/{project_id}", status_code=204)
+def delete_project(project_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Remove a project with its videos, marks, results and cameras. Refused while something is still recording."""
+    p = get_project(db, user, project_id)
+    videos = list(db.scalars(select(Video).where(Video.project_id == p.id)).all())
+    active = [v.id for v in videos if v.status in ("connecting", "recording")]
+    if active:
+        live = liveness.live_among(active, worker.celery)
+        if live is None or live:
+            raise HTTPException(409, "Cannot delete while a recording is running. Stop it first.")
+        for vid in active:
+            control.clear_stop(vid)
+    ids = [v.id for v in videos]
+    if ids:
+        db.execute(delete(SakshiResult).where(SakshiResult.video_id.in_(ids)))
+        db.execute(delete(Mark).where(Mark.video_id.in_(ids)))
+        db.execute(delete(Video).where(Video.id.in_(ids)))
+    db.execute(delete(Camera).where(Camera.project_id == p.id))
+    db.delete(p)
+    db.commit()
+    for vid in ids:
+        shutil.rmtree(settings.data_dir / "videos" / str(vid), ignore_errors=True)

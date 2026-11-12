@@ -4,10 +4,11 @@ import { Spinner } from "../ui/bits";
 import { comparedPct, fmtAgo, fmtTotalDuration, projectSummary, stateBadges } from "../../lib/projectCard";
 
 /** A project at a glance: what is in it, what is happening now, and how far the Sakshi comparison has got. */
-export default function ProjectCard({ p, now }: { p: Project; now: number }) {
+export default function ProjectCard({ p, now, onDelete }: { p: Project; now: number; onDelete: (p: Project) => void }) {
   const badges = stateBadges(p);
   const pct = comparedPct(p.compared_count, p.video_count);
   return (
+    <div className="pcard-wrap">
     <Link to={`/projects/${p.id}`} className="pcard" aria-label={`Open project ${p.name}. ${projectSummary(p)}`}>
       <div className="pc-head">
         <h2 className="pc-name" title={p.name}>{p.name}</h2>
@@ -43,5 +44,7 @@ export default function ProjectCard({ p, now }: { p: Project; now: number }) {
         <div className="progress" role="progressbar" aria-label="Videos compared with Sakshi" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${pct}%` }} /></div>
       </div>
     </Link>
+    <button type="button" className="pc-del" aria-label={`Delete project ${p.name}`} title="Delete project" onClick={() => onDelete(p)}>🗑</button>
+    </div>
   );
 }
