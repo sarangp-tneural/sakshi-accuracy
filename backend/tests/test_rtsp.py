@@ -9,7 +9,7 @@ URL = "rtsp://admin:s3cret@10.0.0.5:554/stream1?key=abc"
 def test_validate_url():
     assert rtsp.validate_rtsp_url(URL) is None
     assert rtsp.validate_rtsp_url("rtsps://h/x") is None
-    assert rtsp.validate_rtsp_url("http://h/x")
+    assert rtsp.validate_rtsp_url("ftp://h/x")
     assert rtsp.validate_rtsp_url("rtsp://") 
     assert rtsp.validate_rtsp_url("rtsp://h/a b")
 
@@ -48,7 +48,7 @@ def test_preview_says_so_when_the_camera_is_unreachable():
 def test_api_validation_and_no_secret_leak(client, auth, monkeypatch):
     pid = client.post("/api/projects", json={"name": "p"}, headers=auth).json()["id"]
     url = f"/api/projects/{pid}/videos/rtsp"
-    assert client.post(url, json={"url": "http://x", "minutes": 5}, headers=auth).status_code == 422
+    assert client.post(url, json={"url": "ftp://x", "minutes": 5}, headers=auth).status_code == 422
     assert client.post(url, json={"url": URL, "minutes": 999}, headers=auth).status_code == 422
     r = client.post(url, json={"url": URL, "minutes": 5}, headers=auth)
     assert r.status_code == 201 and r.json()["status"] == "connecting"
@@ -109,7 +109,7 @@ def test_grab_frame_ok_and_error_scrubbed():
 def test_preview_endpoint(client, auth, monkeypatch):
     pid = client.post("/api/projects", json={"name": "p"}, headers=auth).json()["id"]
     url = f"/api/projects/{pid}/rtsp/preview"
-    assert client.post(url, json={"url": "http://x"}, headers=auth).status_code == 422
+    assert client.post(url, json={"url": "ftp://x"}, headers=auth).status_code == 422
     assert client.post(url, json={"url": URL}).status_code == 401
     monkeypatch.setattr(rtsp, "grab_frame", lambda u: b"\xff\xd8jpg")
     r = client.post(url, json={"url": URL}, headers=auth)

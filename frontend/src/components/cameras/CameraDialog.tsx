@@ -65,7 +65,7 @@ export default function CameraDialog({ projectId, camera, onSaved, onClose }: { 
           </div>
         ) : (
           <Field label={editing ? "New stream link" : "Stream link"} htmlFor="cam-url" error={touched ? errs.url : null} hint="The password is stored encrypted and never shown again.">
-            <input id="cam-url" className="rec-input" type="text" autoComplete="off" spellCheck={false} placeholder="rtsp://user:pass@host:554/stream" value={url}
+            <input id="cam-url" className="rec-input" type="text" autoComplete="off" spellCheck={false} placeholder="rtsp://user:pass@host:554/stream  or  http://host/latest/ch9.jpg" value={url}
               aria-invalid={touched && !!errs.url} onChange={(e) => setUrl(e.target.value)} />
             {editing && <div><Button size="sm" variant="ghost" onClick={() => { setChangeLink(false); setUrl(""); }}>Keep the saved link</Button></div>}
           </Field>

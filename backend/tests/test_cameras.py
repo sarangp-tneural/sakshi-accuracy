@@ -51,7 +51,7 @@ def test_the_link_is_stored_encrypted(client, auth, pid):
 
 
 @pytest.mark.parametrize("body", [
-    {"name": "x", "url": "http://nope", "default_minutes": 30},
+    {"name": "x", "url": "ftp://nope", "default_minutes": 30},
     {"name": "x", "url": URL, "default_minutes": 0},
     {"name": "x", "url": URL, "default_minutes": 121},
     {"name": "   ", "url": URL, "default_minutes": 30},
@@ -234,7 +234,7 @@ def test_videos_show_their_camera_name_without_extra_queries_per_video(client, a
 def test_the_one_off_record_endpoint_still_works(client, auth, pid, queued):
     r = client.post(f"/api/projects/{pid}/videos/rtsp", json={"url": URL, "minutes": 5}, headers=auth)
     assert r.status_code == 201 and r.json()["camera_id"] is None and r.json()["rtsp_minutes"] == 5 and "s3cret" not in r.text
-    assert client.post(f"/api/projects/{pid}/videos/rtsp", json={"url": "http://x", "minutes": 5}, headers=auth).status_code == 422
+    assert client.post(f"/api/projects/{pid}/videos/rtsp", json={"url": "ftp://x", "minutes": 5}, headers=auth).status_code == 422
     assert client.post(f"/api/projects/{pid}/videos/rtsp", json={"url": URL, "minutes": 500}, headers=auth).status_code == 422
 
 

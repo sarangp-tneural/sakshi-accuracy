@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     rtsp_relay_api: str = "http://127.0.0.1:9997"
     rtsp_relay_host: str = "127.0.0.1"
     rtsp_relay_port: int = 8554
+    # snapshot links (http address returning the latest JPEG): fetched as fast as the server answers, but never faster than this
+    snapshot_min_interval_s: float = 0.1
+    snapshot_fail_s: int = 15  # the server failing this long in a row ends the picture feed
+    snapshot_timeout_s: int = 3
+    snapshot_max_bytes: int = 5_000_000
     cors_origins: list[str] = ["http://localhost:5173"]
     celery_eager: bool = False  # tests run tasks inline
 

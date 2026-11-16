@@ -12,9 +12,11 @@ describe("validateCamera", () => {
     expect(validateCamera({ ...ok, name: "x".repeat(100) }, false).name).toBeUndefined();
     expect(validateCamera({ ...ok, name: "x".repeat(101) }, false).name).toMatch(/100/);
   });
-  it("needs an rtsp:// or rtsps:// link without spaces", () => {
+  it("needs an rtsp://, rtsps://, http:// or https:// link without spaces", () => {
     expect(validateCamera({ ...ok, url: "" }, false).url).toBeTruthy();
-    expect(validateCamera({ ...ok, url: "http://x" }, false).url).toMatch(/rtsp/);
+    expect(validateCamera({ ...ok, url: "ftp://x" }, false).url).toMatch(/rtsp/);
+    expect(validateCamera({ ...ok, url: "http://164.52.195.78:8081/latest/store-1/ch9.jpg" }, false).url).toBeUndefined(); // a picture address
+    expect(validateCamera({ ...ok, url: "HTTPS://h/x.jpg" }, false).url).toBeUndefined();
     expect(validateCamera({ ...ok, url: "rtsps://h/x" }, false).url).toBeUndefined();
     expect(validateCamera({ ...ok, url: "rtsp://h/a b" }, false).url).toBeTruthy();
   });
@@ -24,7 +26,7 @@ describe("validateCamera", () => {
   });
   it("when editing, an empty link means keep the saved one, but a typed link is still checked", () => {
     expect(validateCamera({ ...ok, url: "" }, true)).toEqual({});
-    expect(validateCamera({ ...ok, url: "http://bad" }, true).url).toBeTruthy();
+    expect(validateCamera({ ...ok, url: "ftp://bad" }, true).url).toBeTruthy();
   });
 });
 

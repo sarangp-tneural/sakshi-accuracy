@@ -12,6 +12,7 @@ from urllib.parse import urlsplit, urlunsplit
 from cryptography.fernet import Fernet
 
 from . import relay as relay_mod
+from . import snapshot
 from .config import settings
 
 GRACE_S = 5  # allowed shortfall before we call a recording "partial"
@@ -19,8 +20,8 @@ GRACE_S = 5  # allowed shortfall before we call a recording "partial"
 
 def validate_rtsp_url(url: str) -> str | None:
     """Return error string or None."""
-    if not url.lower().startswith(("rtsp://", "rtsps://")):
-        return "Link must start with rtsp:// or rtsps://"
+    if not url.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+        return "Link must start with rtsp://, rtsps://, http:// or https://"
     try:
         parts = urlsplit(url)
     except ValueError:
@@ -99,7 +100,14 @@ def build_ffmpeg_cmd(url: str, minutes: int, out: Path) -> list[str]:
 
 def grab_frame(url: str, *, run=subprocess.run) -> bytes:
     """One JPEG frame from the stream, for the pre-record preview. Errors never contain credentials."""
-    relay = relay_mod.open_relay(url)  # RelayError (a RuntimeError) if the relay is down
+    if snapshot.is_http(url):
+        try:
+            return snapshot.fetch_jpeg(url)  # a snapshot link already is a picture
+        except snapshot.NotAnImage:
+            pass  # an http video stream: let ffmpeg read it below
+        except snapshot.SnapshotError as e:
+            raise RuntimeError(scrub(str(e), url)) from None
+    relay = _open_relay(url)  # RelayError (a RuntimeError) if the relay is down
     try:
         return _grab_frame(url, relay, run)
     finally:
@@ -151,20 +159,63 @@ def _plain_minutes(seconds: int) -> str:
     return f"{m} min" if sec == 0 and m else (f"{m} min {sec} s" if m else f"{sec} s")
 
 
+def _open_relay(url: str):
+    """RTSP links go through the relay; an http video stream is read by ffmpeg directly."""
+    return relay_mod.open_relay(url) if url.lower().startswith(("rtsp://", "rtsps://")) else relay_mod.Relay(url)
+
+
+class _Source:
+    """What a recording reads from: the relay for RTSP (ffmpeg opens a URL), or, for a snapshot link, pictures fed into ffmpeg."""
+
+    def __init__(self, url: str, relay, snap: bool):
+        self.url, self.relay, self.snap, self.feeder = url, relay, snap, None
+
+    @property
+    def stdin(self):
+        return subprocess.PIPE if self.snap else subprocess.DEVNULL
+
+    def cmd(self, minutes: int, out: Path) -> list[str]:
+        return snapshot.build_snapshot_ffmpeg_cmd(minutes, out) if self.snap else build_ffmpeg_cmd(self.relay.url, minutes, out)
+
+    def attach(self, proc) -> None:
+        """A new ffmpeg process was started: (re)start the picture feed for it."""
+        self.detach()
+        if self.snap:
+            self.feeder = snapshot.SnapshotFeeder(self.url, proc.stdin)
+            self.feeder.start()
+
+    def detach(self) -> None:
+        if self.feeder:
+            self.feeder.stop()
+            self.feeder = None
+
+    def explain(self) -> str | None:
+        if self.snap:
+            return scrub(self.feeder.last_error, self.url) if self.feeder and self.feeder.last_error else None
+        return self.relay.explain()
+
+    def close(self) -> None:
+        self.detach()
+        self.relay.close()
+
+
 def run_recording(url: str, minutes: int, out: Path, **kw) -> dict:
-    """Record `url` (the link the user entered) through the relay. See _run_recording for the behaviour."""
+    """Record `url` (the link the user entered): RTSP through the relay, a snapshot link by fetching its pictures.
+    See _run_recording for the behaviour."""
+    snap = snapshot.is_http(url) and snapshot.is_snapshot(url)
     try:
-        relay = relay_mod.open_relay(url)
+        relay = relay_mod.Relay(url) if snap else _open_relay(url)
     except relay_mod.RelayError as e:
         now = kw.get("wall", lambda: datetime.now(timezone.utc))()
         return {"status": "failed", "reason": str(e), "elapsed": 0.0, "started_at": None, "ended_at": now, "attempts": 0}
+    src = _Source(url, relay, snap)
     try:
-        return _run_recording(url, relay, minutes, out, **kw)
+        return _run_recording(url, src, minutes, out, **kw)
     finally:
-        relay.close()
+        src.close()
 
 
-def _run_recording(url: str, relay, minutes: int, out: Path, *, popen=subprocess.Popen, clock=time.monotonic,
+def _run_recording(url: str, src, minutes: int, out: Path, *, popen=subprocess.Popen, clock=time.monotonic,
                   sleep=time.sleep, should_stop=lambda: False, getsize=_size, on_tick=lambda: None,
                   on_attempt=lambda n, last_error: None, on_connected=lambda when: None,
                   wall=lambda: datetime.now(timezone.utc)) -> dict:
@@ -196,7 +247,8 @@ def _run_recording(url: str, relay, minutes: int, out: Path, *, popen=subprocess
         attempts += 1
         on_attempt(attempts, last_error)
         out.unlink(missing_ok=True)  # nothing left over from the previous try
-        proc = popen(build_ffmpeg_cmd(relay.url, minutes, out), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        proc = popen(src.cmd(minutes, out), stdin=src.stdin, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        src.attach(proc)
         try_start = clock()
         reason = ""
         while proc.poll() is None:
@@ -221,7 +273,7 @@ def _run_recording(url: str, relay, minutes: int, out: Path, *, popen=subprocess
         if connected:
             break
         err = scrub((proc.stderr.read() if proc.stderr else "") or "", url).strip()
-        last_error = explain_failure(err) or relay.explain() or reason or (err.splitlines()[-1][-160:] if err else "no answer from the camera")
+        last_error = explain_failure(err) or src.explain() or reason or (err.splitlines()[-1][-160:] if err else "no answer from the camera")
         if clock() >= window_end:
             return give_up()
         for _ in range(settings.rtsp_attempt_retry_s):  # wait before the next try, still listening for Stop

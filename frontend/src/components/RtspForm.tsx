@@ -6,7 +6,7 @@ import CameraPreview from "./cameras/CameraPreview";
 import { Button, Field } from "./ui/bits";
 import { useToast } from "./ui/Toast";
 
-/** One-off recording from any RTSP link. Tick "Save as a camera" to keep the link for one-click recordings later. */
+/** One-off recording from any RTSP link or snapshot (picture) address. Tick "Save as a camera" to keep the link for one-click recordings later. */
 export default function RtspForm({ projectId, onStarted }: { projectId: number; onStarted: () => void }) {
   const [url, setUrl] = useState("");
   const [minutesText, setMinutesText] = useState("5"); // string so clearing the field never leaves a stray 0
@@ -55,9 +55,9 @@ export default function RtspForm({ projectId, onStarted }: { projectId: number; 
 
   return (
     <form className="stack" onSubmit={submit} noValidate aria-label="Record from camera">
-      <p className="muted small" style={{ margin: 0 }}>Paste the RTSP link, pick how long, and it records and saves by itself.</p>
+      <p className="muted small" style={{ margin: 0 }}>Paste the camera link (rtsp:// or a picture address like http://host/latest/ch9.jpg), pick how long, and it records and saves by itself.</p>
       <Field label="Stream link" htmlFor="rtsp-url" error={touched ? errs.url : null} hint="The password is stored encrypted and never shown again.">
-        <input id="rtsp-url" className="rec-input" type="text" autoComplete="off" spellCheck={false} placeholder="rtsp://user:pass@host:554/stream" value={url}
+        <input id="rtsp-url" className="rec-input" type="text" autoComplete="off" spellCheck={false} placeholder="rtsp://user:pass@host:554/stream  or  http://host/latest/ch9.jpg" value={url}
           aria-invalid={touched && !!errs.url} onChange={(e) => setUrl(e.target.value)} onBlur={() => setTouched(true)} />
       </Field>
       <Field label="How long to record" htmlFor="rtsp-min" error={touched ? errs.minutes : null} hint={`1 to ${MAX_MINUTES} minutes. It stops by itself; you can also stop it any time.`}>
