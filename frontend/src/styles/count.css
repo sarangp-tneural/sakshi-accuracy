@@ -101,7 +101,7 @@
   border-radius: var(--r-md); padding: var(--s-4); overflow: auto; box-shadow: var(--shadow-2); display: flex; flex-direction: column; gap: var(--s-3); }
 
 /* result section below the fold */
-.result-wrap { max-width: 1100px; margin: var(--s-4) auto 60px; }
+.result-wrap { max-width: 1100px; margin: var(--s-4) auto 60px; display: flex; flex-direction: column; gap: var(--s-4); }
 .result { display: flex; flex-direction: column; gap: var(--s-3); }
 .sakshi-form { align-items: flex-end; }
 .sakshi-form input { width: 110px; }

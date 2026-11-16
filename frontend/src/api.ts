@@ -70,6 +70,24 @@ export interface VideoList {
 export interface Sakshi { counts: Record<string, number>; legacy?: Record<string, number> | null }
 export interface TypeMetric extends Metric { id: number; label: string; direction: "in" | "out" | null; archived: boolean }
 export interface Comparison { in: Metric; out: Metric; total: Metric; types: TypeMetric[] }
+export interface EvalScalars {
+  tp: number | null; gender_assigned: number | null; real_male_in_tp: number | null; real_female_in_tp: number | null;
+  correct_male: number | null; correct_female: number | null;
+}
+export interface EvalInputs extends EvalScalars { type_tp: Record<string, number> }
+export interface MarkingEval { id: number; label: string; direction: "in" | "out" | null; archived: boolean; metrics: MarkingMetrics }
+export interface MarkingMetrics { actual: number; system: number | null; tp: number | null; fp: number | null; fn: number | null; over_under: number | null; precision: number | null; recall: number | null }
+export interface EvalMetrics {
+  actual: number; system: number | null; tp: number | null; fp: number | null; fn: number | null; over_under: number | null;
+  precision: number | null; recall: number | null; gender_accuracy: number | null; male_accuracy: number | null;
+  female_accuracy: number | null; gender_coverage: number | null;
+}
+export interface Evaluation { inputs: EvalInputs; tp_source: "manual" | "matched"; metrics: EvalMetrics; types: MarkingEval[]; problems: string[] }
+export interface ProjectEvaluation {
+  videos: { id: number; name: string; created_at: string; tp_source: string; metrics: EvalMetrics }[];
+  total: EvalMetrics & { videos: number };
+  types: { id: number; label: string; direction: "in" | "out" | null; archived: boolean; metrics: MarkingMetrics & { videos: number } }[];
+}
 export interface UserSettings { reaction_delay_s: number; sound_enabled: boolean; slow_after_jump: boolean; key_bindings: Bindings }
 
 export const api = {
@@ -111,6 +129,9 @@ export const api = {
   sakshi: (vid: number) => req<Sakshi>(`/videos/${vid}/sakshi`),
   putSakshi: (vid: number, s: Sakshi) => req<Sakshi>(`/videos/${vid}/sakshi`, { method: "PUT", body: body(s) }),
   comparison: (vid: number) => req<Comparison>(`/videos/${vid}/comparison`),
+  evaluation: (vid: number) => req<Evaluation>(`/videos/${vid}/evaluation`),
+  putEvaluation: (vid: number, e: EvalInputs) => req<Evaluation>(`/videos/${vid}/evaluation`, { method: "PUT", body: body(e) }),
+  projectEvaluation: (pid: number) => req<ProjectEvaluation>(`/projects/${pid}/evaluation`),
   settings: () => req<UserSettings>("/settings"),
   putSettings: (s: UserSettings) => req<UserSettings>("/settings", { method: "PUT", body: body(s) }),
   resetSettings: (action?: string) => req<UserSettings>("/settings/reset" + (action ? `?action=${action}` : ""), { method: "POST" }),

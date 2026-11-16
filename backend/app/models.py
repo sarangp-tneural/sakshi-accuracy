@@ -125,3 +125,13 @@ class SakshiResult(Base):
     female_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # {marking_type_id: count}; the four columns above only hold results saved before markings were configurable
     counts: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    # accuracy report inputs (see metrics.py): typed by hand now, filled by timestamp matching later
+    tp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gender_assigned: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    real_male_in_tp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    real_female_in_tp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    correct_male: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    correct_female: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # same idea per marking: {marking_type_id: TP}
+    tp_by_type: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    tp_source: Mapped[str] = mapped_column(String(10), default="manual", server_default="manual")  # manual | matched

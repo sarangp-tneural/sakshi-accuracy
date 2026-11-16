@@ -22,6 +22,7 @@ import type { TimelineMark } from "../components/Timeline";
 import Legend from "../components/Legend";
 import MarksList, { type MarkPatch } from "../components/MarksList";
 import SakshiComparison from "../components/Comparison";
+import EvaluationPanel from "../components/Evaluation";
 import GoToTime from "../components/GoToTime";
 import SettingsDrawer from "../components/SettingsDrawer";
 import ExportDialog from "../components/ExportDialog";
@@ -61,6 +62,7 @@ export default function Count() {
   const [rate, setRate] = useState(1);
   const [playing, setPlaying] = useState(false);
   const [version, setVersion] = useState(0);
+  const [resultVersion, setResultVersion] = useState(0); // bumps when the Sakshi result is saved
   const [nearestId, setNearestId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pickFor, setPickFor] = useState<number | null>(null);
@@ -387,7 +389,8 @@ export default function Count() {
       </div>
 
       <div className="result-wrap">
-        <SakshiComparison videoId={id} types={types} marksVersion={version} onExport={() => setShowExport(true)} />
+        <SakshiComparison videoId={id} types={types} marksVersion={version} onExport={() => setShowExport(true)} onSaved={() => setResultVersion((x) => x + 1)} />
+        <EvaluationPanel videoId={id} version={version + resultVersion} />
       </div>
       {showExport && <ExportDialog videoId={id} videoName={video.name} onClose={() => { setShowExport(false); setTimeout(focusStage, 0); }} />}
     </div>

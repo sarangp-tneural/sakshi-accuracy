@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import current_user, get_video
 from ..models import Mark, MarkingType, User
-from .sakshi import comparison_for
+from .sakshi import _evaluation, comparison_for
 
 router = APIRouter(tags=["export"])
 
@@ -27,7 +27,28 @@ def _rows(db: Session, video_id: int):
         cmp_rows.append([k, c["manual"], "" if c["sakshi"] is None else c["sakshi"],
                          "" if c["diff"] is None else c["diff"],
                          "" if c["percent"] is None else c["percent"], c["status"]])
-    return mark_rows, cmp_rows
+    return mark_rows, cmp_rows, _eval_rows(db, video_id), _type_eval_rows(db, video_id)
+
+
+EVAL_HEAD = ["metric", "value"]
+EVAL_LABELS = [("actual", "actual (manual)"), ("system", "system (Sakshi)"), ("tp", "TP"), ("fp", "FP"), ("fn", "FN"),
+               ("over_under", "over(+)/under(-) count"), ("precision", "precision %"), ("recall", "recall %"),
+               ("gender_accuracy", "gender accuracy overall %"), ("male_accuracy", "male accuracy %"),
+               ("female_accuracy", "female accuracy %"), ("gender_coverage", "gender coverage %")]
+
+
+def _eval_rows(db: Session, video_id: int):
+    m = _evaluation(db, video_id).metrics
+    return [[label, "" if m[k] is None else m[k]] for k, label in EVAL_LABELS]
+
+
+TYPE_HEAD = ["marking", "actual", "system", "tp", "fp", "fn", "over_under", "precision %", "recall %"]
+
+
+def _type_eval_rows(db: Session, video_id: int):
+    return [[t.label] + ["" if t.metrics[k] is None else t.metrics[k]
+                         for k in ("actual", "system", "tp", "fp", "fn", "over_under", "precision", "recall")]
+            for t in _evaluation(db, video_id).types]
 
 
 MARK_HEAD = ["id", "time_s", "marking", "direction", "x", "y", "created_at"]
@@ -42,12 +63,20 @@ def _safe(cell):
 @router.get("/videos/{video_id}/export.csv")
 def export_csv(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     get_video(db, user, video_id)
-    marks, cmp = _rows(db, video_id)
+    marks, cmp, ev, tev = _rows(db, video_id)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["# comparison"])
     w.writerow(CMP_HEAD)
     w.writerows(cmp)
+    w.writerow([])
+    w.writerow(["# evaluation"])
+    w.writerow(EVAL_HEAD)
+    w.writerows(ev)
+    w.writerow([])
+    w.writerow(["# evaluation by marking"])
+    w.writerow(TYPE_HEAD)
+    w.writerows(tev)
     w.writerow([])
     w.writerow(["# marks"])
     w.writerow(MARK_HEAD)
@@ -59,13 +88,21 @@ def export_csv(video_id: int, db: Session = Depends(get_db), user: User = Depend
 @router.get("/videos/{video_id}/export.xlsx")
 def export_xlsx(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     get_video(db, user, video_id)
-    marks, cmp = _rows(db, video_id)
+    marks, cmp, ev, tev = _rows(db, video_id)
     wb = Workbook()
     ws = wb.active
     ws.title = "Comparison"
     ws.append(CMP_HEAD)
     for r in cmp:
         ws.append([_safe(c) for c in r])
+    ws3 = wb.create_sheet("Evaluation")
+    ws3.append(EVAL_HEAD)
+    for r in ev:
+        ws3.append([_safe(c) for c in r])
+    ws4 = wb.create_sheet("Evaluation by marking")
+    ws4.append(TYPE_HEAD)
+    for r in tev:
+        ws4.append([_safe(c) for c in r])
     ws2 = wb.create_sheet("Marks")
     ws2.append(MARK_HEAD)
     for r in marks:

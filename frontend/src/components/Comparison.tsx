@@ -20,7 +20,7 @@ function Cell({ m, kind }: { m: Metric | undefined; kind: "sakshi" | "diff" | "p
   return m.percent === null ? <span className="na">not defined</span> : <span className={`sev ${sev} num`}>{fmtPercent(m)}</span>;
 }
 
-export default function SakshiComparison({ videoId, types, marksVersion, onExport }: { videoId: number; types: MarkingType[]; marksVersion: number; onExport: () => void }) {
+export default function SakshiComparison({ videoId, types, marksVersion, onExport, onSaved }: { videoId: number; types: MarkingType[]; marksVersion: number; onExport: () => void; onSaved?: () => void }) {
   const fields = useMemo(() => activeTypes(types), [types]);
   const [form, setForm] = useState<Form>({});
   const [saved, setSaved] = useState<Form>({});
@@ -63,7 +63,7 @@ export default function SakshiComparison({ videoId, types, marksVersion, onExpor
     const counts: Sakshi["counts"] = {};
     for (const t of fields) { const v = (form[t.id] ?? "").trim(); if (v !== "") counts[String(t.id)] = Number(v); }
     setSaving(true);
-    try { const s = await api.putSakshi(videoId, { counts }); serverCounts.current = s.counts; setSaved({ ...form }); setLegacy(s.legacy ?? null); await refresh(); toast.success("Sakshi result saved"); }
+    try { const s = await api.putSakshi(videoId, { counts }); serverCounts.current = s.counts; setSaved({ ...form }); setLegacy(s.legacy ?? null); await refresh(); onSaved?.(); toast.success("Sakshi result saved"); }
     catch (x) { toast.error(x); } finally { setSaving(false); }
   }
 

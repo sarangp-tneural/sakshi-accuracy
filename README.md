@@ -75,6 +75,12 @@ New projects start with: `F` male IN · `D` male OUT · `J` female IN · `K` fem
 Player keys (per account, changeable in Settings): `Space` play/pause · `Z` undo · `X` back 3 s · `1–4` speed · `←/→` frame step. A key can't be used twice, across markings and player keys.
 Mark time = video time − reaction delay × speed (default delay 0.4 s).
 
+## Accuracy report
+Under the Sakshi comparison on the Count screen, **Accuracy report** gives precision, recall and gender accuracy. Actual = your IN + OUT, system = Sakshi's IN + OUT (both already in the tool). **You type TP**, the number of Sakshi counts that were real visitors; buttons set it for the two simple cases (**All system counts real**: TP = system, **Nothing missed**: TP = actual). Optional gender numbers (about the TPs only) give overall / male / female accuracy and gender coverage.
+**Every marking gets the same report** (e.g. Greeting): the **By marking** table shows your count, Sakshi's count, a TP you type, and FP, FN, precision and recall for it. Markings with no direction don't count toward the IN + OUT footfall report.
+Formulas: FP = system − TP · FN = actual − TP · over/under = system − actual · precision = TP / system · recall = TP / actual · gender accuracy = correct gender / TP · coverage = counts with a gender / system. A blank or undefined value shows "not entered", never 0.
+The project's **Report** tab lists every video with totals (counts summed, then divided), and the CSV/Excel export has an Evaluation block. The maths lives in `backend/app/metrics.py`; TP is stored with `tp_source` (`manual` now) so timestamp matching can fill it later. Apply the migrations with `cd backend && uv run alembic upgrade head`.
+
 ## How to test with a real video
 1. Log in, create a project, **Upload video** (MP4/AVI/MOV). Status goes `processing` → `ready` (a browser-playable H.264 copy is made; the original is never modified).
 2. Open it, play at 4x, count with the keys, try Undo, click a mark to jump, edit/delete a mark.

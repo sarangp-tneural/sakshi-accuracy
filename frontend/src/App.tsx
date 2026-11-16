@@ -32,6 +32,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Guard><Projects /></Guard>} />
           <Route path="/projects/:pid" element={<Guard><ProjectPage tab="videos" /></Guard>} />
+          <Route path="/projects/:pid/report" element={<Guard><ProjectPage tab="report" /></Guard>} />
           <Route path="/projects/:pid/settings" element={<Guard><ProjectPage tab="settings" /></Guard>} />
           <Route path="/videos/:id" element={<Guard><Count /></Guard>} />
           <Route path="*" element={<Navigate to="/" />} />

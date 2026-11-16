@@ -215,6 +215,36 @@ class SakshiIO(BaseModel):
     legacy: dict[str, int] | None = None
 
 
+EvalInt = Annotated[int, Field(ge=0, le=1_000_000)]
+
+
+class EvaluationIn(BaseModel):
+    """Numbers only you can know (blank = not entered). tp: system counts that were real visitors."""
+    tp: EvalInt | None = None
+    gender_assigned: EvalInt | None = None
+    real_male_in_tp: EvalInt | None = None
+    real_female_in_tp: EvalInt | None = None
+    correct_male: EvalInt | None = None
+    correct_female: EvalInt | None = None
+    type_tp: dict[int, EvalInt] = {}  # TP per marking type id (a marking left out = not entered)
+
+
+class MarkingEval(BaseModel):
+    id: int
+    label: str
+    direction: str | None
+    archived: bool
+    metrics: dict
+
+
+class EvaluationOut(BaseModel):
+    inputs: EvaluationIn
+    tp_source: str = "manual"
+    metrics: dict
+    types: list[MarkingEval] = []
+    problems: list[str] = []  # the saved numbers no longer add up (e.g. marks were changed afterwards)
+
+
 class SettingsOut(BaseModel):
     reaction_delay_s: float
     sound_enabled: bool
