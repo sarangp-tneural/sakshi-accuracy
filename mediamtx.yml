@@ -1,0 +1,7 @@
+### Minimal config: just relay one camera so ffmpeg (which can't do this camera's
+### multi-algorithm RTSP digest auth) can pull an unauthenticated local copy instead.
+### The camera URL (with credentials) is injected via the MTX_PATHS_CAM1_SOURCE env var
+### (set in docker-compose.yml from .env) rather than hardcoded here, to keep secrets out of git.
+paths:
+  cam1:
+    sourceOnDemand: no

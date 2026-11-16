@@ -14,5 +14,11 @@ services:
   redis:
     image: redis:7
     ports: ["6390:6379"]
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports: ["8554:8554"]
+    volumes: ["./mediamtx.yml:/mediamtx.yml:ro"]
+    environment:
+      MTX_PATHS_CAM1_SOURCE: ${CAMERA1_RTSP_URL}
 volumes:
   pgdata:
