@@ -88,6 +88,33 @@ export interface ProjectEvaluation {
   total: EvalMetrics & { videos: number };
   types: { id: number; label: string; direction: "in" | "out" | null; archived: boolean; metrics: MarkingMetrics & { videos: number } }[];
 }
+export interface DashVideo {
+  id: number; name: string; status: Video["status"]; source: string; created_at: string;
+  project_id: number; project: string; camera_id: number | null; camera: string | null;
+  marks: number; sakshi_entered: boolean; tp_source: string; actual: number; system: number | null; tp: number | null;
+  metrics: EvalMetrics; problems: string[];
+}
+export type RolledMetrics = EvalMetrics & { videos: number };
+export interface DashGroup { id: number; label: string; videos: number; with_tp: number; metrics: RolledMetrics }
+export interface DashMarking { label: string; direction: "in" | "out" | null; marked: number; metrics: MarkingMetrics & { videos: number } }
+export interface Finding { severity: "bad" | "warn" | "info"; text: string; link: string }
+export interface DashTrend { date: string; videos: number; with_tp: number; actual: number; system: number; precision: number | null; recall: number | null }
+export interface Dashboard {
+  filters: { project_id: number | null; days: number; group: "project" | "camera" };
+  projects: { id: number; name: string }[];
+  cards: { added: number; marked: number; sakshi: number; tp: number; metrics: RolledMetrics; count_off_pct: number | null; actual_total: number; system_total: number };
+  findings: Finding[]; groups: DashGroup[]; markings: DashMarking[]; trend: DashTrend[];
+  activity: { marks_per_day: { date: string; marks: number }[]; videos_per_day: { date: string; videos: number }[]; funnel: { added: number; marked: number; sakshi: number; tp: number } };
+  status_counts: Record<string, number>; videos: DashVideo[]; truncated: boolean;
+}
+export interface ServiceState { state: "up" | "down" | "off" | "warn"; note?: string | null; free_bytes?: number; min_free_bytes?: number; videos_bytes?: number }
+export interface Health {
+  recordings: { active: number; processing: number; failed_7d: number; stuck: { id: number; name: string }[]; stuck_unknown: boolean };
+  cameras: { total: number; recording: number; never_recorded: number; last_failed: { id: number; name: string }[] };
+  services: { disk: ServiceState; redis: ServiceState; relay: ServiceState };
+  problems: { id: number; name: string; status: string; reason: string; when: string }[];
+  checked_at: string;
+}
 export interface UserSettings { reaction_delay_s: number; sound_enabled: boolean; slow_after_jump: boolean; key_bindings: Bindings }
 
 export const api = {
@@ -129,6 +156,10 @@ export const api = {
   sakshi: (vid: number) => req<Sakshi>(`/videos/${vid}/sakshi`),
   putSakshi: (vid: number, s: Sakshi) => req<Sakshi>(`/videos/${vid}/sakshi`, { method: "PUT", body: body(s) }),
   comparison: (vid: number) => req<Comparison>(`/videos/${vid}/comparison`),
+  dashboard: (p: { project_id?: number | null; days: number; group: "project" | "camera" }, signal?: AbortSignal) =>
+    req<Dashboard>(`/dashboard?days=${p.days}&group=${p.group}${p.project_id ? `&project_id=${p.project_id}` : ""}`, { signal }),
+  dashboardHealth: (project_id?: number | null, signal?: AbortSignal) =>
+    req<Health>(`/dashboard/health${project_id ? `?project_id=${project_id}` : ""}`, { signal }),
   evaluation: (vid: number) => req<Evaluation>(`/videos/${vid}/evaluation`),
   putEvaluation: (vid: number, e: EvalInputs) => req<Evaluation>(`/videos/${vid}/evaluation`, { method: "PUT", body: body(e) }),
   projectEvaluation: (pid: number) => req<ProjectEvaluation>(`/projects/${pid}/evaluation`),

@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Projects from "./pages/Projects";
 import ProjectPage from "./pages/ProjectPage";
 import Count from "./pages/Count";
+import Dashboard from "./pages/Dashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ToastProvider } from "./components/ui/Toast";
 
@@ -21,7 +22,7 @@ export default function App() {
       <ErrorBoundary>
         {getToken() && (
           <header className="topbar">
-            <Link to="/">Sakshi Verify</Link>
+            <nav className="topnav"><Link to="/">Sakshi Verify</Link><Link to="/dashboard" className="toplink">Dashboard</Link></nav>
             <div className="profile">
               {email && <span className="profile-email" title={email}>{email}</span>}
               <button className="btn sm" onClick={() => { setToken(null); location.href = "/login"; }}>Log out</button>
@@ -31,6 +32,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Guard><Projects /></Guard>} />
+          <Route path="/dashboard" element={<Guard><Dashboard /></Guard>} />
           <Route path="/projects/:pid" element={<Guard><ProjectPage tab="videos" /></Guard>} />
           <Route path="/projects/:pid/report" element={<Guard><ProjectPage tab="report" /></Guard>} />
           <Route path="/projects/:pid/settings" element={<Guard><ProjectPage tab="settings" /></Guard>} />

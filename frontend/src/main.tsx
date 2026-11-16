@@ -6,6 +6,7 @@ import { SettingsProvider } from "./SettingsContext";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/count.css";
+import "./styles/dashboard.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

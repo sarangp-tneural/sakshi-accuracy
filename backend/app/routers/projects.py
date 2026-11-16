@@ -8,9 +8,9 @@ from .. import control, liveness, worker
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, get_project
-from ..comparison import Manual, compare
+from ..dashboard import evaluation_rows
 from ..marking_defaults import seed_defaults
-from ..metrics import INPUT_FIELDS, evaluate, evaluate_marking, rollup, rollup_markings
+from ..metrics import rollup, rollup_markings
 from ..models import Camera, Mark, MarkingType, Project, SakshiResult, User, Video
 from ..schemas import ProjectIn, ProjectOut
 from ..sql import sakshi_has_value
@@ -85,44 +85,21 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = 
 
 @router.get("/{project_id}/evaluation")
 def project_evaluation(project_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Accuracy report of every video of the project, and the totals (counts summed, then divided).
-    Three grouped queries however many videos there are."""
+    """Accuracy report of every video of the project, and the totals (counts summed, then divided)."""
     get_project(db, user, project_id)
-    videos = list(db.scalars(select(Video).where(Video.project_id == project_id).order_by(Video.created_at.desc(), Video.id.desc())))
-    ids = [v.id for v in videos]
+    rows = evaluation_rows(db, [project_id])
     types = list(db.scalars(select(MarkingType).where(MarkingType.project_id == project_id)
                             .order_by(MarkingType.archived, MarkingType.sort_order, MarkingType.id)))
-    manual: dict[int, Manual] = {i: Manual(0, 0, {}, 0) for i in ids}
-    for vid, direction, type_id, n in db.execute(
-        select(Mark.video_id, Mark.direction, Mark.marking_type_id, func.count()).where(Mark.video_id.in_(ids))
-        .group_by(Mark.video_id, Mark.direction, Mark.marking_type_id)
-    ) if ids else []:
-        m = manual[vid]
-        m.total_marks += n
-        if direction == "in":
-            m.in_count += n
-        elif direction == "out":
-            m.out_count += n
-        if type_id is not None:
-            m.by_type[type_id] = m.by_type.get(type_id, 0) + n
-    saved = {r.video_id: r for r in db.scalars(select(SakshiResult).where(SakshiResult.video_id.in_(ids)))} if ids else {}
-    rows, out = [], []
     per_type: dict[int, list[dict]] = {t.id: [] for t in types}
-    for v in videos:
-        r = saved.get(v.id)
-        cmp = compare(manual[v.id], r, types)
-        system = cmp["total"]["sakshi"]
-        tps = (r.tp_by_type if r else None) or {}
-        for t in cmp["types"]:
-            per_type[t["id"]].append({"actual": t["manual"], "system": t["sakshi"], "tp": tps.get(str(t["id"]))})
-        inp = {k: getattr(r, k) if r else None for k in INPUT_FIELDS}
-        row = {"actual": manual[v.id].total, "system": system, **inp}
-        rows.append(row)
-        out.append({"id": v.id, "name": v.name, "created_at": v.created_at, "tp_source": r.tp_source if r else "manual",
-                    "metrics": evaluate(row["actual"], system, inp)})
+    for r in rows:
+        for t in r["types"]:
+            per_type[t["id"]].append({"actual": t["actual"], "system": t["system"], "tp": t["tp"]})
     by_marking = [{"id": t.id, "label": t.label, "direction": t.direction, "archived": t.archived,
-                   "metrics": rollup_markings(per_type[t.id])} for t in types if per_type[t.id] and (not t.archived or any(x["actual"] for x in per_type[t.id]))]
-    return {"videos": out, "total": rollup(rows), "types": by_marking}
+                   "metrics": rollup_markings(per_type[t.id])}
+                  for t in types if per_type[t.id] and (not t.archived or any(x["actual"] for x in per_type[t.id]))]
+    return {"videos": [{"id": r["id"], "name": r["name"], "created_at": r["created_at"], "tp_source": r["tp_source"],
+                        "metrics": r["metrics"]} for r in rows],
+            "total": rollup(rows), "types": by_marking}
 
 
 @router.delete("/{project_id}", status_code=204)
