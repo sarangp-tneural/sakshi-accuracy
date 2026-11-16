@@ -1,0 +1,16 @@
+### RTSP relay. ffmpeg cannot do the digest auth of some cameras, mediamtx can, so the backend registers each
+### camera link here (through the control API, at the moment it records or previews) and ffmpeg reads the local copy.
+### No camera and no password is written in this file or in git: paths are added at runtime and live in memory only.
+api: yes
+apiAddress: :9997
+rtspAddress: :8554
+paths: {}
+### mediamtx refuses API calls that do not come from inside its own container, and docker makes ours look like
+### they do, so allow them. This is safe because docker-compose.yml publishes both ports on 127.0.0.1 only.
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: api
+      - action: read

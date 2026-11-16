@@ -43,6 +43,9 @@ The link is stored encrypted and is never sent back to the browser (only `rtsp:/
 
 API: `GET/POST /api/projects/{id}/cameras`, `PATCH/DELETE /api/cameras/{id}`, `POST /api/cameras/{id}/record` (`{minutes?}`), `POST /api/cameras/{id}/preview`. Run `alembic upgrade head` (or `./run.sh`) to add the cameras table.
 
+## RTSP relay (cameras ffmpeg can't log in to)
+Some cameras use a digest login that ffmpeg can't do. The app therefore sends every RTSP recording and preview through a local **mediamtx** relay (started by `docker compose up -d`, listening on 127.0.0.1 only). You still just paste the normal `rtsp://user:pass@host/...` link: the backend registers it with the relay for the duration of the recording or preview (a one-off random path, removed afterwards; the password never appears in a path, URL, log or error) and records from the local copy. If the relay isn't running you get a clear message; set `RTSP_RELAY=false` to connect straight to cameras as before. Settings: `RTSP_RELAY_API` (default `http://127.0.0.1:9997`), `RTSP_RELAY_HOST`, `RTSP_RELAY_PORT`.
+
 ## Videos screen
 A project's **Videos** tab is a table (one row per video). **+ Upload video** and **● Record from camera** (top right) open dialogs; you can also **drag files anywhere on the page** to upload (progress shows as a row at the top of the list, so nothing blocks you).
 

@@ -14,5 +14,11 @@ services:
   redis:
     image: redis:7
     ports: ["6390:6379"]
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    # local only: the control API accepts camera links (with passwords), so it must never be reachable from outside
+    ports: ["127.0.0.1:8554:8554", "127.0.0.1:9997:9997"]
+    volumes: ["./mediamtx.yml:/mediamtx.yml:ro"]
 volumes:
   pgdata:

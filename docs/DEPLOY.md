@@ -70,11 +70,12 @@ On the server, edit `docker-compose.yml`:
 Postgres only applies the password on first start. If the `pgdata` volume already exists, run `docker compose down -v` first (this **deletes the database**).
 Note: local edits to this file will conflict with `git pull`; see "Updating" below.
 
-### 7. Start Postgres and Redis
+### 7. Start Postgres, Redis and the RTSP relay
 ```bash
 cd /opt/sakshi-verify
 docker compose up -d --wait
 ```
+This also starts `mediamtx`, the RTSP relay (ports 8554 and 9997, both bound to 127.0.0.1 only). Every recording and preview goes through it, because ffmpeg alone cannot do the login some cameras use. Nothing to configure: people paste the normal `rtsp://user:pass@host/...` link in the app. If recordings say "The RTSP relay is not running", run `docker compose up -d mediamtx`. When updating an existing server, run `docker compose up -d` once so the relay starts.
 
 ### 8. Backend: install and create tables
 ```bash

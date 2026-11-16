@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.fernet import Fernet
 
+from . import relay as relay_mod
 from .config import settings
 
 GRACE_S = 5  # allowed shortfall before we call a recording "partial"
@@ -98,7 +99,15 @@ def build_ffmpeg_cmd(url: str, minutes: int, out: Path) -> list[str]:
 
 def grab_frame(url: str, *, run=subprocess.run) -> bytes:
     """One JPEG frame from the stream, for the pre-record preview. Errors never contain credentials."""
-    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp", "-timeout", "8000000", "-i", url,
+    relay = relay_mod.open_relay(url)  # RelayError (a RuntimeError) if the relay is down
+    try:
+        return _grab_frame(url, relay, run)
+    finally:
+        relay.close()
+
+
+def _grab_frame(url: str, relay, run) -> bytes:
+    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp", "-timeout", "8000000", "-i", relay.url,
            "-frames:v", "1", "-vf", "scale='min(960,iw)':-2", "-f", "image2", "-vcodec", "mjpeg", "pipe:1"]
     try:
         r = run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
@@ -106,9 +115,9 @@ def grab_frame(url: str, *, run=subprocess.run) -> bytes:
         raise RuntimeError("The stream did not answer within 15 seconds") from None
     if r.returncode != 0 or not r.stdout:
         err = scrub((r.stderr or b"").decode(errors="replace"), url).strip()[-300:]
-        if friendly := explain_failure(err):
+        if friendly := explain_failure(err) or relay.explain():
             raise RuntimeError(friendly)
-        raise RuntimeError(f"Could not read a frame from the stream. {err}".strip())
+        raise RuntimeError(f"Could not read a frame from the stream. {scrub(err, relay.url)}".strip())
     return r.stdout
 
 
@@ -142,7 +151,20 @@ def _plain_minutes(seconds: int) -> str:
     return f"{m} min" if sec == 0 and m else (f"{m} min {sec} s" if m else f"{sec} s")
 
 
-def run_recording(url: str, minutes: int, out: Path, *, popen=subprocess.Popen, clock=time.monotonic,
+def run_recording(url: str, minutes: int, out: Path, **kw) -> dict:
+    """Record `url` (the link the user entered) through the relay. See _run_recording for the behaviour."""
+    try:
+        relay = relay_mod.open_relay(url)
+    except relay_mod.RelayError as e:
+        now = kw.get("wall", lambda: datetime.now(timezone.utc))()
+        return {"status": "failed", "reason": str(e), "elapsed": 0.0, "started_at": None, "ended_at": now, "attempts": 0}
+    try:
+        return _run_recording(url, relay, minutes, out, **kw)
+    finally:
+        relay.close()
+
+
+def _run_recording(url: str, relay, minutes: int, out: Path, *, popen=subprocess.Popen, clock=time.monotonic,
                   sleep=time.sleep, should_stop=lambda: False, getsize=_size, on_tick=lambda: None,
                   on_attempt=lambda n, last_error: None, on_connected=lambda when: None,
                   wall=lambda: datetime.now(timezone.utc)) -> dict:
@@ -174,7 +196,7 @@ def run_recording(url: str, minutes: int, out: Path, *, popen=subprocess.Popen, 
         attempts += 1
         on_attempt(attempts, last_error)
         out.unlink(missing_ok=True)  # nothing left over from the previous try
-        proc = popen(build_ffmpeg_cmd(url, minutes, out), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        proc = popen(build_ffmpeg_cmd(relay.url, minutes, out), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         try_start = clock()
         reason = ""
         while proc.poll() is None:
@@ -199,7 +221,7 @@ def run_recording(url: str, minutes: int, out: Path, *, popen=subprocess.Popen, 
         if connected:
             break
         err = scrub((proc.stderr.read() if proc.stderr else "") or "", url).strip()
-        last_error = explain_failure(err) or reason or (err.splitlines()[-1][-160:] if err else "no answer from the camera")
+        last_error = explain_failure(err) or relay.explain() or reason or (err.splitlines()[-1][-160:] if err else "no answer from the camera")
         if clock() >= window_end:
             return give_up()
         for _ in range(settings.rtsp_attempt_retry_s):  # wait before the next try, still listening for Stop

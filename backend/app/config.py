@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     rtsp_attempt_try_s: int = 25
     rtsp_min_footage_bytes: int = 16 * 1024  # a file this big holds real video (not just the header), so the camera is "connected"
     rtsp_io_timeout_s: int = 10  # ffmpeg's own socket timeout, so a dead camera fails fast instead of hanging
+    # every recording and preview goes through a local mediamtx relay (it handles camera logins ffmpeg cannot)
+    rtsp_relay: bool = True
+    rtsp_relay_api: str = "http://127.0.0.1:9997"
+    rtsp_relay_host: str = "127.0.0.1"
+    rtsp_relay_port: int = 8554
     cors_origins: list[str] = ["http://localhost:5173"]
     celery_eager: bool = False  # tests run tasks inline
 

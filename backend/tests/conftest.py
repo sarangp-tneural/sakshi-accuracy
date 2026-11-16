@@ -32,6 +32,7 @@ def _db():
 def _clean(tmp_path, monkeypatch):
     monkeypatch.setattr(control, "_client", FakeRedis())  # never the real Redis
     monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    monkeypatch.setattr(settings, "rtsp_relay", False)  # tests never talk to a real mediamtx (test_relay.py turns it on with a fake)
     # never run real ffmpeg tasks from API tests
     monkeypatch.setattr(worker, "enqueue", lambda task, vid: None)
     # API tests must not ask the real broker which workers are alive: by default every recording counts as live
