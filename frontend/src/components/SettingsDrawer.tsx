@@ -1,10 +1,11 @@
 import { useEffect } from "react";
+import type { MarkingType } from "../api";
 import { capture } from "../keys/capture";
 import { Button } from "./ui/bits";
 import SettingsPanel from "./SettingsPanel";
 
 /** Overlay on the right; the <video> element stays mounted so position and playback are untouched. */
-export default function SettingsDrawer({ onClose }: { onClose: () => void }) {
+export default function SettingsDrawer({ projectId, onMarkingsChange, onClose }: { projectId: number; onMarkingsChange: (t: MarkingType[]) => void; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !capture.active) onClose(); };
     document.addEventListener("keydown", onKey);
@@ -13,7 +14,7 @@ export default function SettingsDrawer({ onClose }: { onClose: () => void }) {
   return (
     <aside className="drawer" role="dialog" aria-label="Settings" aria-modal="false">
       <div className="row"><h2>Settings</h2><span className="spacer" /><Button size="sm" onClick={onClose}>Close ✕</Button></div>
-      <SettingsPanel />
+      <SettingsPanel projectId={projectId} onMarkingsChange={onMarkingsChange} />
     </aside>
   );
 }

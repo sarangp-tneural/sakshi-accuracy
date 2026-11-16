@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, streamUrl, type Mark, type Video } from "../api";
+import { api, streamUrl, type Mark, type MarkingType, type Video } from "../api";
 import { useSettings } from "../SettingsContext";
-import { COUNT_ACTIONS, SPEEDS } from "../keys/registry";
+import { SPEEDS } from "../keys/registry";
+import { countMarks, markingIdOf, markLabel, typesById, withMarkingKeys } from "../lib/markings";
 import { capture } from "../keys/capture";
 import { decideKey, nextRepeat } from "../lib/keyEvents";
 import { markTime } from "../lib/reaction";
@@ -51,6 +52,9 @@ export default function Count() {
   const [load, setLoad] = useState<"loading" | "ok" | "error">("loading");
   const [loadErr, setLoadErr] = useState("");
   const [marks, setMarks] = useState<LocalMark[]>([]);
+  const [types, setTypes] = useState<MarkingType[]>([]); // the project's markings, removed ones included
+  const T = useRef(types); T.current = types;
+  const byType = useMemo(() => typesById(types), [types]);
   const [showSettings, setShowSettings] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -115,16 +119,13 @@ export default function Count() {
   const fetchAll = useCallback(() => {
     setLoad("loading");
     Promise.all([api.video(id), api.marks(id)])
+      .then(async ([v, m]) => { setTypes(await api.markingTypes(v.project_id)); return [v, m] as const; })
       .then(([v, m]) => { setVideo(v); setLines(v.lines ?? []); setMarks(m); setDuration(v.duration_s ?? 0); setLoad("ok"); api.projects().then((ps) => setProjectName(ps.find((p) => p.id === v.project_id)?.name ?? "")).catch(() => {}); })
       .catch((e) => { setLoadErr(e.message); setLoad("error"); });
   }, [id]);
   useEffect(fetchAll, [fetchAll]);
 
-  const counts = useMemo(() => {
-    const c = { in: 0, out: 0, male: 0, female: 0, total: marks.length };
-    for (const m of marks) { c[m.direction]++; if (m.gender !== "unknown") c[m.gender]++; }
-    return c;
-  }, [marks]);
+  const counts = useMemo(() => countMarks(marks, types), [marks, types]);
 
   // nearest mark to the playhead (4x per second, only re-renders when the answer changes)
   const byTime = useMemo(() => [...marks].sort((a, b) => a.time_s - b.time_s), [marks]);
@@ -145,21 +146,21 @@ export default function Count() {
     restoreRate.current = null; clearTimeout(slowTimer.current);
   }, []);
 
-  const addMark = useCallback((action: string) => {
+  const addMark = useCallback((typeId: number) => {
     const v = vref.current; if (!v) return;
-    const def = COUNT_ACTIONS[action];
+    const type = T.current.find((t) => t.id === typeId && !t.archived); if (!type) return;
     // read the time straight from the element, at the moment of the press
     const t = markTime(v.currentTime, S.current.reaction_delay_s, v.playbackRate);
     const now = Date.now();
-    lastRepeat.current = nextRepeat(lastRepeat.current, action, now);
-    popup.current?.show({ kind: def.direction, text: def.popup, gender: def.gender, times: lastRepeat.current.n });
-    counters.current?.flash([def.direction, ...(def.gender !== "unknown" ? [def.gender] : []), "total"]);
+    lastRepeat.current = nextRepeat(lastRepeat.current, "mt:" + typeId, now);
+    popup.current?.show({ kind: type.direction ?? "mark", text: type.label.toUpperCase(), color: type.color ?? undefined, times: lastRepeat.current.n });
+    counters.current?.flash([...(type.direction ? [type.direction] : []), "t:" + typeId, "total"]);
     if (S.current.sound_enabled) beep();
-    const tmp: LocalMark = { id: tempId--, video_id: id, time_s: t, direction: def.direction, gender: def.gender, x: null, y: null, pending: true };
+    const tmp: LocalMark = { id: tempId--, video_id: id, time_s: t, direction: type.direction, marking_type_id: typeId, x: null, y: null, pending: true };
     setMarks((m) => [...m, tmp]);
     enqueue(async () => {
       try {
-        const saved = await api.addMark(id, { time_s: t, direction: def.direction, gender: def.gender });
+        const saved = await api.addMark(id, { time_s: t, marking_type_id: typeId });
         setMarks((m) => m.map((x) => (x.id === tmp.id ? saved : x)));
         setVersion((x) => x + 1);
       } catch (e) {
@@ -176,7 +177,7 @@ export default function Count() {
       const real = cur.filter((m) => m.id > 0);
       const pending = cur.filter((m) => m.id < 0);
       const victim = pending.length ? pending[pending.length - 1] : real.reduce((a, b) => (b.id > a.id ? b : a));
-      popup.current?.show({ kind: "undo", text: `UNDO: ${victim.gender === "unknown" ? "" : victim.gender.toUpperCase() + " "}${victim.direction.toUpperCase()}`, gender: victim.gender });
+      popup.current?.show({ kind: "undo", text: `UNDO: ${markLabel(victim, typesById(T.current)).toUpperCase()}` });
       return cur.filter((m) => m !== victim);
     });
     lastRepeat.current = null;
@@ -204,12 +205,13 @@ export default function Count() {
   useEffect(() => {
     if (noVideo) return; // counting and playback keys need a video
     const onKey = (e: KeyboardEvent) => {
-      const d = decideKey(e, S.current.key_bindings, { capturing: capture.active, repeatable: HOLD_TO_REPEAT });
+      const d = decideKey(e, withMarkingKeys(S.current.key_bindings, T.current), { capturing: capture.active, repeatable: HOLD_TO_REPEAT });
       if (d.type === "ignore") return;
       e.preventDefault();
       if (d.type === "swallow") return;
       const a = d.action;
-      if (a in COUNT_ACTIONS) addMark(a);
+      const typeId = markingIdOf(a);
+      if (typeId !== null) addMark(typeId);
       else if (a in SPEEDS) setSpeed(SPEEDS[a]);
       else if (a === "play_pause") togglePlay();
       else if (a === "undo") undo();
@@ -240,18 +242,19 @@ export default function Count() {
     if (m.id < 0) return;
     setMarks((cur) => cur.filter((x) => x.id !== m.id));
     enqueue(async () => { await api.deleteMark(m.id); setVersion((x) => x + 1); });
+    if (m.marking_type_id === null) { toast.info("Mark deleted"); return; }
     toast.info("Mark deleted", {
       label: "Undo",
       run: () => enqueue(async () => {
-        const saved = await api.addMark(id, { time_s: m.time_s, direction: m.direction, gender: m.gender });
+        const saved = await api.addMark(id, { time_s: m.time_s, marking_type_id: m.marking_type_id! });
         setMarks((cur) => [...cur, saved]); setVersion((x) => x + 1);
       }),
     });
   }, [enqueue, toast, id]);
 
   const seekTo = useCallback((m: LocalMark) => { setSelectedId(m.id); if (vref.current) vref.current.currentTime = m.time_s; }, []);
-  const timelineMarks = useMemo<TimelineMark[]>(() => byTime.map((m) => ({ id: m.id, time_s: m.time_s, direction: m.direction, gender: m.gender, hasPoint: m.x !== null && m.y !== null })), [byTime]);
-  const pointMarks = useMemo<PointMark[]>(() => byTime.filter((m) => m.x !== null && m.y !== null).map((m) => ({ id: m.id, time_s: m.time_s, direction: m.direction, gender: m.gender, x: m.x!, y: m.y! })), [byTime]);
+  const timelineMarks = useMemo<TimelineMark[]>(() => byTime.map((m) => ({ id: m.id, time_s: m.time_s, direction: m.direction, color: (m.marking_type_id !== null ? byType.get(m.marking_type_id)?.color : null) ?? null, label: markLabel(m, byType), hasPoint: m.x !== null && m.y !== null })), [byTime, byType]);
+  const pointMarks = useMemo<PointMark[]>(() => byTime.filter((m) => m.x !== null && m.y !== null).map((m) => ({ id: m.id, time_s: m.time_s, direction: m.direction, color: (m.marking_type_id !== null ? byType.get(m.marking_type_id)?.color : null) ?? null, label: markLabel(m, byType), x: m.x!, y: m.y! })), [byTime, byType]);
 
   // ---- points: pause on the mark's frame, click the picture ----
   const startPick = useCallback((m: LocalMark) => {
@@ -374,17 +377,17 @@ export default function Count() {
           )}
           <section className="card marks">
             <h3>Marks ({marks.length}) <span className="small muted">newest first</span></h3>
-            <MarksList marks={marks} currentId={nearestId} selectedId={selectedId} pickingId={pickFor}
+            <MarksList marks={marks} types={types} currentId={nearestId} selectedId={selectedId} pickingId={pickFor}
               onSeek={seekTo} onPatch={patchMark} onDelete={removeMark} onPlacePoint={startPick} onClearPoint={clearPoint} onReplay={replay} onDone={focusStage} noVideo={noVideo} />
           </section>
-          {!noVideo && <Legend bindings={settings.key_bindings} />}
+          {!noVideo && <Legend bindings={settings.key_bindings} types={types} />}
         </aside>
 
-        {showSettings && <SettingsDrawer onClose={() => { setShowSettings(false); setTimeout(focusStage, 0); }} />}
+        {showSettings && <SettingsDrawer projectId={video.project_id} onMarkingsChange={setTypes} onClose={() => { setShowSettings(false); setTimeout(focusStage, 0); }} />}
       </div>
 
       <div className="result-wrap">
-        <SakshiComparison videoId={id} marksVersion={version} onExport={() => setShowExport(true)} />
+        <SakshiComparison videoId={id} types={types} marksVersion={version} onExport={() => setShowExport(true)} />
       </div>
       {showExport && <ExportDialog videoId={id} videoName={video.name} onClose={() => { setShowExport(false); setTimeout(focusStage, 0); }} />}
     </div>

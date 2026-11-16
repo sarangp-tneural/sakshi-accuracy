@@ -79,9 +79,7 @@ class VideoOut(BaseModel):
     mark_total: int = 0
     mark_in: int = 0
     mark_out: int = 0
-    mark_male: int = 0
-    mark_female: int = 0
-    mark_unknown: int = 0
+    mark_types: dict[str, int] = {}  # marks per marking type id
     sakshi_entered: bool = False
     camera_id: int | None = None
     camera_name: str | None = None
@@ -148,19 +146,49 @@ class RtspPreviewIn(BaseModel):
 
 
 Direction = Literal["in", "out"]
-Gender = Literal["male", "female", "unknown"]
+KeyCode = Annotated[str, Field(min_length=1, max_length=20)]
+HexColor = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
+
+
+class MarkingTypeIn(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+    direction: Direction | None = None  # None: tracked on its own, not part of the IN/OUT totals
+    key_code: KeyCode
+    color: HexColor | None = None
+
+
+class MarkingTypePatch(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=60)
+    direction: Direction | None = None
+    key_code: KeyCode | None = None
+    color: HexColor | None = None
+
+
+class MarkingTypeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    label: str
+    direction: str | None
+    key_code: str
+    color: str | None
+    sort_order: int
+    archived: bool
+    mark_count: int = 0
+
+
+class MarkingOrderIn(BaseModel):
+    ids: list[int]
 
 
 class MarkIn(BaseModel):
     time_s: float = Field(ge=0)
-    direction: Direction
-    gender: Gender
+    marking_type_id: int
 
 
 class MarkPatch(BaseModel):
     time_s: float | None = Field(default=None, ge=0)
-    direction: Direction | None = None
-    gender: Gender | None = None
+    marking_type_id: int | None = None
 
 
 class PointIn(BaseModel):
@@ -173,18 +201,18 @@ class MarkOut(BaseModel):
     id: int
     video_id: int
     time_s: float
-    direction: str
-    gender: str
+    direction: str | None
+    marking_type_id: int | None
     x: float | None = None
     y: float | None = None
     created_at: datetime
 
 
 class SakshiIO(BaseModel):
-    in_count: int | None = Field(default=None, ge=0)
-    out_count: int | None = Field(default=None, ge=0)
-    male_count: int | None = Field(default=None, ge=0)
-    female_count: int | None = Field(default=None, ge=0)
+    """What Sakshi counted, one number per marking type id (leave a type out for "not entered")."""
+    counts: dict[int, Annotated[int, Field(ge=0)]] = {}
+    # read-only: results saved before markings were configurable
+    legacy: dict[str, int] | None = None
 
 
 class SettingsOut(BaseModel):

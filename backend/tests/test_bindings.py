@@ -3,11 +3,11 @@ from app import key_registry as kr
 
 def test_defaults_valid_and_complete():
     assert kr.validate_bindings(dict(kr.DEFAULT_BINDINGS)) == []
-    assert len(kr.ACTIONS) == 15
+    assert len(kr.ACTIONS) == 9
 
 
 def test_duplicate():
-    b = dict(kr.DEFAULT_BINDINGS, male_in="KeyD")
+    b = dict(kr.DEFAULT_BINDINGS, jump_back="KeyZ")
     assert any("duplicate" in e for e in kr.validate_bindings(b))
 
 
@@ -21,18 +21,18 @@ def test_unknown_and_missing():
 
 def test_disallowed_keys():
     for bad in ["Tab", "Escape", "Enter", "ShiftLeft", "ControlLeft", "AltRight", "MetaLeft", "Nope", ""]:
-        assert kr.validate_bindings(dict(kr.DEFAULT_BINDINGS, male_in=bad)), bad
+        assert kr.validate_bindings(dict(kr.DEFAULT_BINDINGS, jump_back=bad)), bad
 
 
 def test_merge_fills_missing():
-    saved = {"male_in": "KeyQ"}
+    saved = {"jump_back": "KeyQ"}
     m = kr.merge_with_defaults(saved)
-    assert m["male_in"] == "KeyQ" and m["undo"] == "KeyZ" and set(m) == set(kr.ACTIONS)
+    assert m["jump_back"] == "KeyQ" and m["undo"] == "KeyZ" and set(m) == set(kr.ACTIONS)
 
 
 def test_merge_collision_falls_back_to_defaults():
     # a saved key equals the default of a missing action -> would duplicate
-    m = kr.merge_with_defaults({"male_in": "KeyZ"})
+    m = kr.merge_with_defaults({"jump_back": "KeyZ"})
     assert m == kr.DEFAULT_BINDINGS
 
 

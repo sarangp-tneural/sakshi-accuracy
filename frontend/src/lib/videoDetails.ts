@@ -72,7 +72,6 @@ export function videoDetails(v: Video, now: number): Detail[] {
 
   const total = v.mark_total;
   out.push({ label: "Marks", value: total ? `${total} · ▲ IN ${v.mark_in} · ▼ OUT ${v.mark_out}` : "none yet", tone: total ? undefined : "muted" });
-  if (total) out.push({ label: "Gender", value: `♂ ${v.mark_male} · ♀ ${v.mark_female} · ? ${v.mark_unknown}` });
   out.push({ label: "Sakshi result", value: v.sakshi_entered ? "entered" : "not entered", tone: v.sakshi_entered ? "good" : "muted" });
 
   if (attempting) {

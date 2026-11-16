@@ -28,7 +28,7 @@ export default function ExportDialog({ videoId, videoName, onClose }: { videoId:
         <b>Included</b>
         <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
           <li>Comparison: IN, OUT, total, male, female (manual, Sakshi, difference, %)</li>
-          <li>Marks: {count === null ? "…" : count} rows (time, direction, gender, created at)</li>
+          <li>Marks: {count === null ? "…" : count} rows (time, marking, direction, created at)</li>
         </ul>
       </div>
       <div className="row" style={{ justifyContent: "flex-end" }}>

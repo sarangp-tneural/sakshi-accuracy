@@ -4,10 +4,19 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user, get_mark, get_video
-from ..models import Mark, User
+from ..models import Mark, MarkingType, User
 from ..schemas import MarkIn, MarkOut, MarkPatch, PointIn
 
 router = APIRouter(tags=["marks"])
+
+
+def _usable_type(db: Session, project_id: int, type_id: int) -> MarkingType:
+    t = db.get(MarkingType, type_id)
+    if not t or t.project_id != project_id:
+        raise HTTPException(422, "Unknown marking for this project")
+    if t.archived:
+        raise HTTPException(422, "This marking was removed")
+    return t
 
 
 @router.get("/videos/{video_id}/marks", response_model=list[MarkOut])
@@ -23,7 +32,8 @@ def create_mark(video_id: int, body: MarkIn, db: Session = Depends(get_db), user
         raise HTTPException(409, "The video file was deleted, so new marks cannot be added")
     if v.duration_s is not None and body.time_s > v.duration_s + 1:
         raise HTTPException(422, "time_s is beyond the end of the video")
-    m = Mark(video_id=video_id, created_by=user.id, **body.model_dump())
+    t = _usable_type(db, v.project_id, body.marking_type_id)
+    m = Mark(video_id=video_id, created_by=user.id, time_s=body.time_s, marking_type_id=t.id, direction=t.direction)
     db.add(m)
     db.commit()
     return m
@@ -35,7 +45,11 @@ def patch_mark(mark_id: int, body: MarkPatch, db: Session = Depends(get_db), use
     for k, val in body.model_dump(exclude_unset=True).items():
         if val is None:
             raise HTTPException(422, f"{k} cannot be null")
-        setattr(m, k, val)
+        if k == "marking_type_id":
+            t = _usable_type(db, get_video(db, user, m.video_id).project_id, val)
+            m.marking_type_id, m.direction = t.id, t.direction
+        else:
+            setattr(m, k, val)
     db.commit()
     return m
 

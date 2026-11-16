@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { DIRECTION_META, GENDER_META, type Direction, type Gender } from "../../lib/semantic";
+import type { MarkingType } from "../../api";
+import { directionIcon, directionText, typeColor } from "../../lib/markings";
 import { keyLabel } from "../../keys/registry";
 
 export function Button({ variant = "secondary", size, className = "", ...p }:
@@ -13,12 +14,14 @@ export const Spinner = ({ label = "Loading" }: { label?: string }) => <span clas
 
 export function Keycap({ code }: { code: string }) { return <kbd className="keycap">{keyLabel(code)}</kbd>; }
 
-export const DirBadge = ({ d }: { d: Direction }) => (
-  <span className={`badge ${d}`}><span aria-hidden>{DIRECTION_META[d].icon}</span>{DIRECTION_META[d].label}</span>
-);
-export const GenderBadge = ({ g }: { g: Gender }) => (
-  <span className={`badge ${g}`} title={GENDER_META[g].label}><span aria-hidden>{GENDER_META[g].icon}</span>{GENDER_META[g].short}</span>
-);
+/** A marking as a coloured chip: its direction arrow and label. */
+export function MarkBadge({ type }: { type: Pick<MarkingType, "label" | "color" | "direction"> | undefined }) {
+  return (
+    <span className="badge mtype" style={{ color: typeColor(type) }} title={type ? `${type.label} (${directionText(type.direction)})` : "Unknown marking"}>
+      <span aria-hidden>{directionIcon(type?.direction ?? null)}</span>{type?.label ?? "Unknown"}
+    </span>
+  );
+}
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return <div className="empty"><h3>{title}</h3>{children}</div>;

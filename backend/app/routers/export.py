@@ -8,29 +8,29 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user, get_video
-from ..models import Mark, User
+from ..models import Mark, MarkingType, User
 from .sakshi import comparison_for
 
 router = APIRouter(tags=["export"])
-METRICS = ["in", "out", "total", "male", "female"]
 
 
 def _rows(db: Session, video_id: int):
     marks = db.scalars(select(Mark).where(Mark.video_id == video_id).order_by(Mark.time_s, Mark.id)).all()
-    mark_rows = [[m.id, round(m.time_s, 3), m.direction, m.gender,
+    labels = {t.id: t.label for t in db.scalars(select(MarkingType).where(MarkingType.id.in_(
+        {m.marking_type_id for m in marks if m.marking_type_id is not None})))} if marks else {}
+    mark_rows = [[m.id, round(m.time_s, 3), labels.get(m.marking_type_id, ""), m.direction or "",
                   "" if m.x is None else round(m.x, 4), "" if m.y is None else round(m.y, 4),
                   m.created_at.isoformat()] for m in marks]
     cmp = comparison_for(db, video_id)
     cmp_rows = []
-    for k in METRICS:
-        c = cmp[k]
+    for k, c in [("in", cmp["in"]), ("out", cmp["out"]), ("total", cmp["total"])] + [(t["label"], t) for t in cmp["types"]]:
         cmp_rows.append([k, c["manual"], "" if c["sakshi"] is None else c["sakshi"],
                          "" if c["diff"] is None else c["diff"],
                          "" if c["percent"] is None else c["percent"], c["status"]])
     return mark_rows, cmp_rows
 
 
-MARK_HEAD = ["id", "time_s", "direction", "gender", "x", "y", "created_at"]
+MARK_HEAD = ["id", "time_s", "marking", "direction", "x", "y", "created_at"]
 CMP_HEAD = ["metric", "manual", "sakshi", "difference", "difference_percent", "status"]
 
 

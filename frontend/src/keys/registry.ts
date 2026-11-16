@@ -1,5 +1,6 @@
 // Single registry of actions + default bindings. Legend, handlers and rebinding UI all read from here.
 // The action list itself lives in shared/actions.json so the server validates against the same names.
+// These are the player actions (per user). Counting keys belong to each project's markings, not to this list.
 import spec from "../../../shared/actions.json";
 
 export type ActionName = (typeof spec.actions)[number]["name"];
@@ -8,22 +9,12 @@ export type Bindings = Record<string, string>;
 export interface ActionDef {
   name: ActionName;
   label: string;
-  group: "count" | "player";
+  group: "player";
   default: string;
 }
 
 export const ACTIONS = spec.actions as ActionDef[];
 export const DEFAULT_BINDINGS: Bindings = Object.fromEntries(ACTIONS.map((a) => [a.name, a.default]));
-
-/** What each counting action records. */
-export const COUNT_ACTIONS: Record<string, { direction: "in" | "out"; gender: "male" | "female" | "unknown"; popup: string }> = {
-  male_in: { direction: "in", gender: "male", popup: "MALE IN" },
-  male_out: { direction: "out", gender: "male", popup: "MALE OUT" },
-  female_in: { direction: "in", gender: "female", popup: "FEMALE IN" },
-  female_out: { direction: "out", gender: "female", popup: "FEMALE OUT" },
-  in_unknown: { direction: "in", gender: "unknown", popup: "IN" },
-  out_unknown: { direction: "out", gender: "unknown", popup: "OUT" },
-};
 
 export const SPEEDS: Record<string, number> = { speed_1: 1, speed_2: 2, speed_3: 3, speed_4: 4 };
 

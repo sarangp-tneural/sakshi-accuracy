@@ -27,7 +27,7 @@ export default function VideoTable({ items, uploads, now, dim, onCancelUpload, o
         <thead>
           <tr>
             <th scope="col">Name</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col">Duration</th>
-            <th scope="col">Marks</th><th scope="col">Gender</th><th scope="col">Sakshi</th><th scope="col" className="c-added">Added</th>
+            <th scope="col">Marks</th><th scope="col">Sakshi</th><th scope="col" className="c-added">Added</th>
             <th scope="col"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>

@@ -1,10 +1,11 @@
-import { memo, useEffect, useRef, type RefObject } from "react";
+import { memo, useEffect, useMemo, useRef, type RefObject } from "react";
 import { fmtClock, fmtTime } from "../lib/format";
 import { ensureVisible, fullView, hitMarker, panView, rulerStep, timeToX, visibleSlice, xToTime, zoomView, type View } from "../lib/timelineView";
 import { useTick } from "../lib/useTick";
 import { Button } from "./ui/bits";
 
-export interface TimelineMark { id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; hasPoint: boolean }
+/** color: the marking's own hex colour, or null to use the IN/OUT colour. */
+export interface TimelineMark { id: number; time_s: number; direction: "in" | "out" | null; color: string | null; label: string; hasPoint: boolean }
 
 interface Props {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -15,8 +16,14 @@ interface Props {
 }
 
 const RULER = 20; // px reserved at the top for the time ruler
-/** Vertical centres of the IN and OUT marker rows for a canvas of height h. */
-const rowsFor = (h: number) => ({ in: RULER + (h - RULER) * 0.27, out: RULER + (h - RULER) * 0.73 });
+/** Vertical centres of the IN and OUT marker rows for a canvas of height h. Marks with no direction get a third,
+ *  middle row, which only exists while there are such marks. */
+const rowsFor = (h: number, other: boolean) => {
+  const body = h - RULER;
+  return other
+    ? { in: RULER + body * 0.2, other: RULER + body * 0.5, out: RULER + body * 0.8 }
+    : { in: RULER + body * 0.27, other: RULER + body * 0.5, out: RULER + body * 0.73 };
+};
 const DENSE = 300; // above this many visible marks draw thin lines instead of shapes
 const DRAG_PX = 4;
 const FOLLOW_PAUSE_MS = 4000;
@@ -38,13 +45,15 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
   const pendingSeek = useRef<number | null>(null);
   const raf = useRef(0);
   const colors = useRef({ in: "#6ea8fe", out: "#fb923c", male: "#b79df0", female: "#34d3a4", text: "#9aa4b0", border: "#2f3740", surface: "#1a1f25", fg: "#e8eaed" });
-  const live = useRef({ marks, selectedId, duration, onSelect });
-  live.current = { marks, selectedId, duration, onSelect };
+  const hasOther = useMemo(() => marks.some((m) => m.direction === null), [marks]);
+  const live = useRef({ marks, selectedId, duration, onSelect, hasOther });
+  live.current = { marks, selectedId, duration, onSelect, hasOther };
   const times = useRef<number[]>([]);
   times.current = marks.map((m) => m.time_s);
 
   useEffect(() => { view.current = fullView(duration); dirty.current = true; }, [duration]);
   useEffect(() => { dirty.current = true; }, [marks, selectedId]);
+
 
   // size + colors
   useEffect(() => {
@@ -72,8 +81,8 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
     const g = c.getContext("2d")!;
     const dpr = c.width / width.current;
     const W = width.current, H = height.current, v = view.current, col = colors.current;
-    const ROW = rowsFor(H);
-    const { marks: ms, selectedId: sel, duration: dur } = live.current;
+    const { marks: ms, selectedId: sel, duration: dur, hasOther: other } = live.current;
+    const ROW = rowsFor(H, other);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
     g.fillStyle = col.surface; g.fillRect(0, 0, W, H);
@@ -88,25 +97,25 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
     }
     // row guides
     g.strokeStyle = col.border; g.lineWidth = 1;
-    for (const y of [ROW.in, ROW.out]) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); g.stroke(); }
+    for (const y of other ? [ROW.in, ROW.other, ROW.out] : [ROW.in, ROW.out]) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); g.stroke(); }
     g.fillStyle = col.text; g.globalAlpha = 0.55; g.font = "700 10px system-ui, sans-serif";
     g.fillText("▲ IN", 4, ROW.in - 9); g.fillText("▼ OUT", 4, ROW.out - 9);
+    if (other) g.fillText("• OTHER", 4, ROW.other - 9);
     g.globalAlpha = 1;
     // markers
     const [lo, hi] = visibleSlice(times.current, v, 0.5);
     const dense = hi - lo > DENSE;
     for (let i = lo; i < hi; i++) {
       const m = ms[i];
-      const x = timeToX(m.time_s, v, W), y = ROW[m.direction];
+      const x = timeToX(m.time_s, v, W), y = ROW[m.direction ?? "other"];
       const isSel = m.id === sel;
-      g.fillStyle = col[m.direction];
+      g.fillStyle = m.color ?? (m.direction ? col[m.direction] : col.text);
       if (dense && !isSel) { g.fillRect(x - 1, y - 10, 2, 20); continue; }
       const r = isSel ? 9 : 6.5;
       g.beginPath();
       if (m.hasPoint) { g.moveTo(x, y - r - 1); g.lineTo(x + r + 1, y); g.lineTo(x, y + r + 1); g.lineTo(x - r - 1, y); g.closePath(); } // diamond = has a point
       else g.arc(x, y, r, 0, Math.PI * 2);
       g.fill();
-      if (m.gender !== "unknown") { g.strokeStyle = col[m.gender]; g.lineWidth = 2; g.stroke(); }
       if (isSel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r + 4, 0, Math.PI * 2); g.stroke(); }
     }
     // playhead
@@ -165,14 +174,14 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
     const r = canvas.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const hit = (x: number, y: number) => hitMarker(live.current.marks, view.current, width.current, x, y, rowsFor(height.current), 12);
+  const hit = (x: number, y: number) => hitMarker(live.current.marks, view.current, width.current, x, y, rowsFor(height.current, live.current.hasOther), 12);
 
   const showTip = (x: number, y: number) => {
     const el = tip.current; if (!el) return;
     const idx = hit(x, y);
     const m = idx >= 0 ? live.current.marks[idx] : null;
     const t = m ? m.time_s : xToTime(x, view.current, width.current);
-    el.textContent = m ? `${fmtTime(t)} · ${m.direction.toUpperCase()}${m.gender === "unknown" ? "" : " · " + m.gender}${m.hasPoint ? " · 📍" : ""}` : fmtTime(t);
+    el.textContent = m ? `${fmtTime(t)} · ${m.label}${m.hasPoint ? " · 📍" : ""}` : fmtTime(t);
     el.style.left = Math.min(Math.max(0, x - 50), Math.max(0, width.current - 130)) + "px";
     el.style.opacity = "1";
   };

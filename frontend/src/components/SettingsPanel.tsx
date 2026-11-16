@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "../SettingsContext";
+import type { MarkingType } from "../api";
+import MarkingsEditor from "./MarkingsEditor";
 import { ACTIONS, keyLabel, labelOf, rebind, swap } from "../keys/registry";
 import { capture } from "../keys/capture";
 import { Button, Keycap } from "./ui/bits";
@@ -9,7 +11,7 @@ import { useToast } from "./ui/Toast";
 function setCapture(on: boolean) { capture.active = on; window.dispatchEvent(new Event("sv-capture")); }
 
 /** Used both in the Project > Settings tab and in the Count-screen drawer. */
-export default function SettingsPanel() {
+export default function SettingsPanel({ projectId, onMarkingsChange }: { projectId?: number; onMarkingsChange?: (t: MarkingType[]) => void }) {
   const { settings, update, reset } = useSettings();
   const toast = useToast();
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export default function SettingsPanel() {
 
   return (
     <div className="stack">
+      {projectId !== undefined && <MarkingsEditor projectId={projectId} onChange={onMarkingsChange} />}
       <section className="stack">
         <h3>Counting</h3>
         <div className="field">
@@ -65,8 +68,8 @@ export default function SettingsPanel() {
       </section>
 
       <section>
-        <div className="row"><h3>Keyboard shortcuts</h3><span className="spacer" /><Button size="sm" onClick={() => setConfirmAll(true)}>Reset all</Button></div>
-        <p className="small muted" style={{ margin: "4px 0" }}>Click Change, then press the new key. Esc cancels. Single keys only.</p>
+        <div className="row"><h3>Player shortcuts</h3><span className="spacer" /><Button size="sm" onClick={() => setConfirmAll(true)}>Reset all</Button></div>
+        <p className="small muted" style={{ margin: "4px 0" }}>Click Change, then press the new key. Esc cancels. Single keys only. Counting keys are set per marking, above.</p>
         <div role="list">
           {ACTIONS.map((a) => {
             const isCap = capturing === a.name;

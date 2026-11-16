@@ -8,7 +8,8 @@ from .. import control, liveness, worker
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, get_project
-from ..models import Camera, Mark, Project, SakshiResult, User, Video
+from ..marking_defaults import seed_defaults
+from ..models import Camera, Mark, MarkingType, Project, SakshiResult, User, Video
 from ..schemas import ProjectIn, ProjectOut
 from ..sql import sakshi_has_value
 
@@ -47,7 +48,7 @@ def with_summary(db: Session, projects: list[Project]) -> list[ProjectOut]:
         o.mark_total += n
         if direction == "in":
             o.mark_in += n
-        else:
+        elif direction == "out":
             o.mark_out += n
         last[pid].append(newest)
 
@@ -74,6 +75,8 @@ def list_projects(db: Session = Depends(get_db), user: User = Depends(current_us
 def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     p = Project(name=body.name.strip(), owner_id=user.id)
     db.add(p)
+    db.flush()
+    seed_defaults(db, p.id)
     db.commit()
     return with_summary(db, [p])[0]
 
@@ -96,6 +99,7 @@ def delete_project(project_id: int, db: Session = Depends(get_db), user: User = 
         db.execute(delete(Mark).where(Mark.video_id.in_(ids)))
         db.execute(delete(Video).where(Video.id.in_(ids)))
     db.execute(delete(Camera).where(Camera.project_id == p.id))
+    db.execute(delete(MarkingType).where(MarkingType.project_id == p.id))
     db.delete(p)
     db.commit()
     for vid in ids:

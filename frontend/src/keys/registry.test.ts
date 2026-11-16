@@ -8,7 +8,7 @@ describe("registry", () => {
   it("defaults are complete and unique", () => {
     expect(Object.keys(DEFAULT_BINDINGS)).toHaveLength(ACTIONS.length);
     expect(hasDuplicates(DEFAULT_BINDINGS)).toBe(false);
-    expect(DEFAULT_BINDINGS.male_in).toBe("KeyF");
+    expect(DEFAULT_BINDINGS.jump_back).toBe("KeyX");
   });
   it("friendly labels", () => {
     expect(keyLabel("KeyF")).toBe("F");
@@ -21,37 +21,37 @@ describe("registry", () => {
     expect(isBindable("KeyQ")).toBe(true);
   });
   it("detects conflicts", () => {
-    expect(findConflict(DEFAULT_BINDINGS, "male_in", "KeyD")).toBe("male_out");
-    expect(findConflict(DEFAULT_BINDINGS, "male_in", "KeyF")).toBeNull();
-    expect(findConflict(DEFAULT_BINDINGS, "male_in", "KeyQ")).toBeNull();
+    expect(findConflict(DEFAULT_BINDINGS, "jump_back", "KeyZ")).toBe("undo");
+    expect(findConflict(DEFAULT_BINDINGS, "jump_back", "KeyX")).toBeNull();
+    expect(findConflict(DEFAULT_BINDINGS, "jump_back", "KeyQ")).toBeNull();
   });
   it("rebind refuses duplicates", () => {
-    const r = rebind(DEFAULT_BINDINGS, "male_in", "KeyD");
-    expect(r).toEqual({ ok: false, reason: "conflict", with: "male_out" });
-    const ok = rebind(DEFAULT_BINDINGS, "male_in", "KeyQ");
-    expect(ok.ok && ok.bindings.male_in).toBe("KeyQ");
-    expect(rebind(DEFAULT_BINDINGS, "male_in", "Tab")).toEqual({ ok: false, reason: "not_bindable" });
+    const r = rebind(DEFAULT_BINDINGS, "jump_back", "KeyZ");
+    expect(r).toEqual({ ok: false, reason: "conflict", with: "undo" });
+    const ok = rebind(DEFAULT_BINDINGS, "jump_back", "KeyQ");
+    expect(ok.ok && ok.bindings.jump_back).toBe("KeyQ");
+    expect(rebind(DEFAULT_BINDINGS, "jump_back", "Tab")).toEqual({ ok: false, reason: "not_bindable" });
   });
   it("swap exchanges keys with no duplicates", () => {
-    const s = swap(DEFAULT_BINDINGS, "male_in", "KeyD");
-    expect(s.male_in).toBe("KeyD");
-    expect(s.male_out).toBe("KeyF");
+    const s = swap(DEFAULT_BINDINGS, "jump_back", "KeyZ");
+    expect(s.jump_back).toBe("KeyZ");
+    expect(s.undo).toBe("KeyX");
     expect(hasDuplicates(s)).toBe(false);
   });
   it("reset one swaps if default is taken", () => {
-    const changed = { ...DEFAULT_BINDINGS, male_in: "KeyQ", undo: "KeyF" };
-    const r = resetOne(changed, "male_in");
-    expect(r.male_in).toBe("KeyF");
+    const changed = { ...DEFAULT_BINDINGS, jump_back: "KeyQ", undo: "KeyX" };
+    const r = resetOne(changed, "jump_back");
+    expect(r.jump_back).toBe("KeyX");
     expect(r.undo).toBe("KeyQ");
     expect(hasDuplicates(r)).toBe(false);
     expect(resetAll()).toEqual(DEFAULT_BINDINGS);
   });
   it("merge fills missing actions from defaults", () => {
-    const m = mergeWithDefaults({ male_in: "KeyQ" });
-    expect(m.male_in).toBe("KeyQ");
+    const m = mergeWithDefaults({ jump_back: "KeyQ" });
+    expect(m.jump_back).toBe("KeyQ");
     expect(m.undo).toBe("KeyZ");
     expect(Object.keys(m)).toHaveLength(ACTIONS.length);
     expect(mergeWithDefaults(null)).toEqual(DEFAULT_BINDINGS);
-    expect(mergeWithDefaults({ male_in: "KeyZ" })).toEqual(DEFAULT_BINDINGS); // collision -> defaults
+    expect(mergeWithDefaults({ jump_back: "KeyZ" })).toEqual(DEFAULT_BINDINGS); // collision -> defaults
   });
 });

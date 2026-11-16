@@ -1,16 +1,18 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Mark } from "../api";
+import type { Mark, MarkingType } from "../api";
 import { fmtTime } from "../lib/format";
 import { newestFirst } from "../lib/ticks";
 import { visibleRange } from "../lib/virtual";
-import { Button, DirBadge, GenderBadge } from "./ui/bits";
+import { activeTypes, directionIcon } from "../lib/markings";
+import { Button, MarkBadge } from "./ui/bits";
 
 const ROW_H = 38;
 type M = Mark & { pending?: boolean };
-export interface MarkPatch { time_s?: number; direction?: Mark["direction"]; gender?: Mark["gender"] }
+export interface MarkPatch { time_s?: number; marking_type_id?: number }
 
 interface Props {
   marks: M[];
+  types: MarkingType[]; // every marking of the project, removed ones included (old marks keep their label)
   currentId: number | null; // nearest to the playhead
   selectedId: number | null;
   pickingId: number | null;
@@ -25,13 +27,14 @@ interface Props {
 }
 
 /** Windowed list: only the visible rows exist in the DOM, so 5,000 marks stay fast. */
-function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay, onDone, noVideo = false }: Props) {
+function MarksList({ marks, types, currentId, selectedId, pickingId, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay, onDone, noVideo = false }: Props) {
   const sorted = useMemo(() => newestFirst(marks), [marks]);
   const box = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [h, setH] = useState(300);
   const [editing, setEditing] = useState<number | null>(null);
   const raf = useRef(0);
+  const byId = useMemo(() => new Map(types.map((t) => [t.id, t])), [types]);
 
   useLayoutEffect(() => {
     const el = box.current; if (!el) return;
@@ -57,10 +60,10 @@ function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, o
   return (
     <div className="marks-scroll" ref={box} role="list" aria-label="Marks, newest first"
       onScroll={(e) => { const t = e.currentTarget.scrollTop; cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(() => setScrollTop(t)); }}>
-      {!sorted.length && <div className="empty small">{noVideo ? "No marks." : "No marks yet. Press a counting key while the video plays."}</div>}
+      {!sorted.length && <div className="empty small">{noVideo ? "No marks." : "No marks yet. Press a marking key while the video plays."}</div>}
       <div style={{ height: sorted.length * ROW_H, position: "relative" }}>
         {sorted.slice(start, end).map((m, i) => (
-          <MarkRow key={m.id} m={m} top={(start + i) * ROW_H} current={m.id === currentId} selected={m.id === selectedId} picking={m.id === pickingId}
+          <MarkRow key={m.id} m={m} types={types} type={m.marking_type_id === null ? undefined : byId.get(m.marking_type_id)} top={(start + i) * ROW_H} current={m.id === currentId} selected={m.id === selectedId} picking={m.id === pickingId}
             editing={editing === m.id} noVideo={noVideo}
             onEdit={() => setEditing(m.id)}
             onCancel={() => { setEditing(null); onDone(); }}
@@ -73,19 +76,18 @@ function MarksList({ marks, currentId, selectedId, pickingId, onSeek, onPatch, o
 }
 
 interface RowProps {
-  m: M; top: number; current: boolean; selected: boolean; picking: boolean; editing: boolean; noVideo: boolean;
+  m: M; types: MarkingType[]; type: MarkingType | undefined; top: number; current: boolean; selected: boolean; picking: boolean; editing: boolean; noVideo: boolean;
   onEdit: () => void; onCancel: () => void; onSave: (p: MarkPatch) => void;
   onSeek: Props["onSeek"]; onPatch: Props["onPatch"]; onDelete: Props["onDelete"];
   onPlacePoint: Props["onPlacePoint"]; onClearPoint: Props["onClearPoint"]; onReplay: Props["onReplay"];
 }
 
-const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, editing, noVideo, onEdit, onCancel, onSave, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay }: RowProps) {
-  const [dir, setDir] = useState(m.direction);
-  const [gen, setGen] = useState(m.gender);
+const MarkRow = memo(function MarkRow({ m, types, type, top, current, selected, picking, editing, noVideo, onEdit, onCancel, onSave, onSeek, onPatch, onDelete, onPlacePoint, onClearPoint, onReplay }: RowProps) {
+  const [typeId, setTypeId] = useState<number | null>(m.marking_type_id);
   const [t, setT] = useState(m.time_s.toFixed(2));
   const tNum = Number(t);
   const valid = t.trim() !== "" && tNum >= 0 && Number.isFinite(tNum);
-  const save = () => { if (valid) onSave({ direction: dir, gender: gen, time_s: tNum }); };
+  const save = () => { if (valid) onSave({ time_s: tNum, ...(typeId !== null && typeId !== m.marking_type_id ? { marking_type_id: typeId } : {}) }); };
   const style = { top, height: ROW_H };
   const hasPoint = m.x !== null && m.y !== null;
 
@@ -93,8 +95,10 @@ const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, edit
     return (
       <div className="mrow editing" style={style} role="listitem"
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") { e.stopPropagation(); onCancel(); } }}>
-        <select aria-label="Direction" value={dir} onChange={(e) => setDir(e.target.value as typeof dir)}><option value="in">IN</option><option value="out">OUT</option></select>
-        <select aria-label="Gender" value={gen} onChange={(e) => setGen(e.target.value as typeof gen)}><option value="male">♂ M</option><option value="female">♀ F</option><option value="unknown">? Unk</option></select>
+        <select aria-label="Marking" value={typeId ?? ""} onChange={(e) => setTypeId(Number(e.target.value))}>
+          {typeId !== null && !activeTypes(types).some((t) => t.id === typeId) && <option value={typeId}>{type?.label ?? "Unknown"} (removed)</option>}
+          {activeTypes(types).map((t) => <option key={t.id} value={t.id}>{directionIcon(t.direction)} {t.label}</option>)}
+        </select>
         <input aria-label="Time in seconds" aria-invalid={!valid} type="number" min={0} step={0.1} value={t} onChange={(e) => setT(e.target.value)} />
         <Button size="sm" variant="primary" disabled={!valid} onClick={save} aria-label="Save mark">✓</Button>
         <Button size="sm" onClick={onCancel} aria-label="Cancel edit">✕</Button>
@@ -105,8 +109,7 @@ const MarkRow = memo(function MarkRow({ m, top, current, selected, picking, edit
   return (
     <div className={`mrow ${current ? "current" : ""} ${selected ? "selected" : ""} ${picking ? "picking" : ""} ${m.pending ? "pending" : ""}`} style={style} role="listitem" aria-current={current || undefined}>
       {noVideo ? <span className="num">{fmtTime(m.time_s)}</span> : <button className="seeklink num" onClick={() => onSeek(m)} title="Jump to this mark">{fmtTime(m.time_s)}</button>}
-      <DirBadge d={m.direction} />
-      <GenderBadge g={m.gender} />
+      <MarkBadge type={type} />
       {hasPoint && <span className="pin" title="Has a point on the picture" aria-label="Has a point">📍</span>}
       <span className="spacer" />
       <div className="mactions">

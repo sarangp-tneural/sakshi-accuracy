@@ -41,13 +41,13 @@ export function visibleSlice(times: number[], v: View, pad = 0): [number, number
   return [lower(v.start - pad), lower(v.end + pad + 1e-9)];
 }
 
-/** Nearest marker (index into `items`) within `radius` px of the pointer. IN markers sit on one row, OUT on another. */
-export function hitMarker(items: { time_s: number; direction: "in" | "out" }[], v: View, width: number, px: number, py: number,
-  rowY: { in: number; out: number }, radius = 10): number {
+/** Nearest marker (index into `items`) within `radius` px of the pointer. IN markers sit on one row, OUT on another, marks without a direction on a middle row. */
+export function hitMarker(items: { time_s: number; direction: "in" | "out" | null }[], v: View, width: number, px: number, py: number,
+  rowY: { in: number; out: number; other: number }, radius = 10): number {
   const [lo, hi] = visibleSlice(items.map((m) => m.time_s), v, 0);
   let best = -1, bd = radius;
   for (let i = lo; i < hi; i++) {
-    const d = Math.hypot(timeToX(items[i].time_s, v, width) - px, rowY[items[i].direction] - py);
+    const d = Math.hypot(timeToX(items[i].time_s, v, width) - px, rowY[items[i].direction ?? "other"] - py);
     if (d < bd) { bd = d; best = i; }
   }
   return best;

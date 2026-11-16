@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from .. import key_registry as kr
 from ..db import get_db
 from ..deps import current_user
-from ..models import User, UserSettings
+from sqlalchemy import select
+
+from ..models import MarkingType, Project, User, UserSettings
 from ..schemas import SettingsIn, SettingsOut
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -25,6 +27,13 @@ def _out(s: UserSettings) -> SettingsOut:
                        slow_after_jump=s.slow_after_jump, key_bindings=kr.merge_with_defaults(s.key_bindings))
 
 
+def _marking_keys(db: Session, user: User) -> dict[str, str]:
+    """Shortcut keys the user's projects use for markings, key -> "label" (a player key must not clash with one)."""
+    rows = db.execute(select(MarkingType.key_code, MarkingType.label).join(Project, Project.id == MarkingType.project_id)
+                      .where(Project.owner_id == user.id, MarkingType.archived.is_(False))).all()
+    return {k: label for k, label in rows}
+
+
 @router.get("", response_model=SettingsOut)
 def get_settings(db: Session = Depends(get_db), user: User = Depends(current_user)):
     s = _row(db, user)
@@ -36,6 +45,10 @@ def get_settings(db: Session = Depends(get_db), user: User = Depends(current_use
 def put_settings(body: SettingsIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     if errs := kr.validate_bindings(body.key_bindings):
         raise HTTPException(422, "; ".join(errs))
+    taken = _marking_keys(db, user)
+    for action, code in body.key_bindings.items():
+        if code in taken:
+            raise HTTPException(409, f'Key {code} is used for the marking "{taken[code]}"')
     s = _row(db, user)
     s.reaction_delay_s, s.sound_enabled, s.slow_after_jump = body.reaction_delay_s, body.sound_enabled, body.slow_after_jump
     s.key_bindings = dict(body.key_bindings)
@@ -55,6 +68,8 @@ def reset(action: str | None = None, db: Session = Depends(get_db), user: User =
         if action not in kr.ACTIONS:
             raise HTTPException(422, f"unknown action: {action}")
         want = kr.DEFAULT_BINDINGS[action]
+        if want in (taken := _marking_keys(db, user)):
+            raise HTTPException(409, f'Key {want} is used for the marking "{taken[want]}"')
         holder = next((a for a, k in cur.items() if k == want and a != action), None)
         if holder:
             cur[holder] = cur[action]

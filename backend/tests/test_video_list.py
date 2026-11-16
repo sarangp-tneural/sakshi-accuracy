@@ -149,10 +149,10 @@ def test_busy_ignores_filters(client, auth, seeded):
 def test_item_summary_fields(client, auth, seeded):
     items = {v["name"]: v for v in get(client, auth, seeded).json()["items"]}
     c = items["charlie.mp4"]
-    assert (c["mark_total"], c["mark_in"], c["mark_out"], c["mark_male"], c["mark_female"], c["mark_unknown"]) == (2, 1, 1, 1, 1, 0)
+    assert (c["mark_total"], c["mark_in"], c["mark_out"]) == (2, 1, 1)
     assert c["sakshi_entered"] is True
     e = items["echo rtsp"]
-    assert (e["mark_total"], e["mark_unknown"]) == (1, 1)
+    assert e["mark_total"] == 1
     assert items["100%_done.mp4"]["sakshi_entered"] is False  # saved but blank
     assert items["Bravo cam"]["mark_total"] == 0
 

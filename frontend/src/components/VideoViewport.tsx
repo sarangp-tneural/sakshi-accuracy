@@ -8,7 +8,7 @@ import { overlayRect, type VirtualLine } from "../lib/lines";
 import { Button } from "./ui/bits";
 import LinesOverlay from "./lines/LinesOverlay";
 
-export interface PointMark { id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number; y: number }
+export interface PointMark { id: number; time_s: number; direction: "in" | "out" | null; color: string | null; label: string; x: number; y: number }
 export interface ViewportHandle { step: (dir: 1 | -1, frames?: number) => void }
 
 interface Props {
@@ -207,10 +207,9 @@ const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
       const r = sel ? 11 : 8;
       g.globalAlpha = alpha;
       if (sel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.arc(s.x, s.y, r + 5, 0, Math.PI * 2); g.stroke(); }
-      g.fillStyle = colors.current[p.direction]; g.beginPath(); g.arc(s.x, s.y, r, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = p.gender === "unknown" ? "rgba(0,0,0,.7)" : colors.current[p.gender]; g.lineWidth = 3; g.stroke();
-      if (p.gender !== "unknown") { g.strokeStyle = "rgba(0,0,0,.6)"; g.lineWidth = 1; g.beginPath(); g.arc(s.x, s.y, r + 2, 0, Math.PI * 2); g.stroke(); }
-      const label = p.direction === "in" ? "IN" : "OUT";
+      g.fillStyle = p.color ?? (p.direction ? colors.current[p.direction] : colors.current.unknown); g.beginPath(); g.arc(s.x, s.y, r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "rgba(0,0,0,.7)"; g.lineWidth = 3; g.stroke();
+      const label = p.label.length > 16 ? p.label.slice(0, 15) + "…" : p.label;
       g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,.75)"; g.strokeText(label, s.x, s.y - r - 6);
       g.fillStyle = "#fff"; g.fillText(label, s.x, s.y - r - 6);
       drewSomething.current = true;

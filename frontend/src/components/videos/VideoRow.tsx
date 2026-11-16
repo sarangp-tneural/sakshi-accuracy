@@ -3,13 +3,12 @@ import { Link } from "react-router-dom";
 import type { Video } from "../../api";
 import { fmtClock, fmtDateShort, fmtTime, recordingProgress } from "../../lib/format";
 import { RECORDER_HINT, waitingForRecorder } from "../../lib/cameras";
-import { genderParts } from "../../lib/videoFilters";
 import { attemptingFor, canRemoveFile, isActive, isExportable, isFileRemoved, isOpenable, parseAttempt, stopLabel } from "../../lib/videoRow";
 import { videoDetails } from "../../lib/videoDetails";
 import { Button, Spinner } from "../ui/bits";
 import RowMenu, { type MenuItem } from "./RowMenu";
 
-export const COLS = 9;
+export const COLS = 8;
 
 function StatusCell({ v, now }: { v: Video; now: number }) {
   if (v.status === "connecting") {
@@ -88,11 +87,6 @@ function VideoRow({ v, now, expanded, onToggle, onOpen, onStop, onExport, onDele
         <td className="num">{v.duration_s ? fmtTime(v.duration_s) : <span className="muted">—</span>}</td>
         <td className="num nowrap">
           <span className="mk in">IN {v.mark_in}</span> <span className="muted">/</span> <span className="mk out">OUT {v.mark_out}</span>
-        </td>
-        <td className="num nowrap" aria-label={`Male ${v.mark_male}, female ${v.mark_female}, unknown ${v.mark_unknown}`}>
-          {genderParts(v).map((p, i) => (
-            <span key={p.key}>{i > 0 && <span className="muted"> · </span>}<span className={`g ${p.key}`}>{p.letter} {p.n}</span></span>
-          ))}
         </td>
         <td>{v.sakshi_entered ? <span className="sak yes">✓ entered</span> : <span className="sak no">not entered</span>}</td>
         <td className="c-added small muted nowrap">{fmtDateShort(v.created_at)}</td>

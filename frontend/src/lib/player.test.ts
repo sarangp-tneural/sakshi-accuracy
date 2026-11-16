@@ -97,13 +97,14 @@ describe("timelineView", () => {
     expect(visibleSlice(t, { start: 12, end: 15 }, 6)).toEqual([3, 6]);
   });
   it("hitMarker picks the nearest marker on the right row within the radius", () => {
-    const items = [{ time_s: 10, direction: "in" as const }, { time_s: 10, direction: "out" as const }, { time_s: 50, direction: "in" as const }];
+    const items = [{ time_s: 10, direction: "in" as const }, { time_s: 10, direction: "out" as const }, { time_s: 50, direction: "in" as const }, { time_s: 70, direction: null }];
     const v = { start: 0, end: 100 };
-    const row = { in: 10, out: 30 };
+    const row = { in: 10, out: 30, other: 20 };
     expect(hitMarker(items, v, 1000, 100, 10, row)).toBe(0);
     expect(hitMarker(items, v, 1000, 100, 30, row)).toBe(1);
     expect(hitMarker(items, v, 1000, 500, 10, row)).toBe(2);
     expect(hitMarker(items, v, 1000, 300, 10, row)).toBe(-1);
+    expect(hitMarker(items, v, 1000, 700, 20, row)).toBe(3); // no direction: the middle row
     expect(hitMarker([], v, 1000, 1, 1, row)).toBe(-1);
   });
 });

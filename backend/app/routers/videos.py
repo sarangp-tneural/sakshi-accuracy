@@ -34,24 +34,20 @@ def with_summary(db: Session, videos: list[Video]) -> list[VideoOut]:
         return outs
     by_id = {o.id: o for o in outs}
     ids = list(by_id)
-    for vid, direction, gender, n in db.execute(
-        select(Mark.video_id, Mark.direction, Mark.gender, func.count()).where(Mark.video_id.in_(ids))
-        .group_by(Mark.video_id, Mark.direction, Mark.gender)
+    for vid, direction, type_id, n in db.execute(
+        select(Mark.video_id, Mark.direction, Mark.marking_type_id, func.count()).where(Mark.video_id.in_(ids))
+        .group_by(Mark.video_id, Mark.direction, Mark.marking_type_id)
     ):
         o = by_id[vid]
         o.mark_total += n
         if direction == "in":
             o.mark_in += n
-        else:
+        elif direction == "out":
             o.mark_out += n
-        if gender == "male":
-            o.mark_male += n
-        elif gender == "female":
-            o.mark_female += n
+        if type_id is not None:
+            o.mark_types[str(type_id)] = o.mark_types.get(str(type_id), 0) + n
     for (vid,) in db.execute(select(SakshiResult.video_id).where(SakshiResult.video_id.in_(ids), sakshi_has_value())):
         by_id[vid].sakshi_entered = True
-    for o in outs:
-        o.mark_unknown = o.mark_total - o.mark_male - o.mark_female
     for o in outs:
         if o.video_removed_at is None:
             size = storage.dir_size(storage.video_path(o.id))

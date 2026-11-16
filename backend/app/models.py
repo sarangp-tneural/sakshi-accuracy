@@ -35,6 +35,21 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class MarkingType(Base):
+    """One kind of mark a project can count (e.g. "Male IN", "Greeting"), with its own shortcut key.
+    direction in/out adds to the IN/OUT totals; None is tracked on its own."""
+    __tablename__ = "marking_types"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(60))
+    direction: Mapped[str | None] = mapped_column(String(3), nullable=True)  # in | out | None
+    key_code: Mapped[str] = mapped_column(String(20))
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # a type that already has marks is archived instead of deleted: hidden from counting, kept for old marks
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
 class Camera(Base):
     """A saved RTSP source of a project, so a recording is one click. The link is stored encrypted and never returned."""
     __tablename__ = "cameras"
@@ -89,8 +104,9 @@ class Mark(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE"), index=True)
     time_s: Mapped[float] = mapped_column(Float)
-    direction: Mapped[str] = mapped_column(String(3))  # in | out
-    gender: Mapped[str] = mapped_column(String(7))  # male | female | unknown
+    direction: Mapped[str | None] = mapped_column(String(3), nullable=True)  # in | out | None; copied from the type
+    gender: Mapped[str] = mapped_column(String(7), default="unknown")  # deprecated, no longer used
+    marking_type_id: Mapped[int | None] = mapped_column(ForeignKey("marking_types.id"), nullable=True, index=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     # where on the picture (normalised 0..1 of the video frame); both null or both set
@@ -107,3 +123,5 @@ class SakshiResult(Base):
     out_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     male_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     female_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # {marking_type_id: count}; the four columns above only hold results saved before markings were configurable
+    counts: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)

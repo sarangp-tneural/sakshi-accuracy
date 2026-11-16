@@ -7,8 +7,8 @@ from typing import Iterable
 class Manual:
     in_count: int
     out_count: int
-    male: int
-    female: int
+    by_type: dict[int, int]  # marks per marking type id
+    total_marks: int = 0
 
     @property
     def total(self) -> int:
@@ -16,17 +16,18 @@ class Manual:
 
 
 def manual_counts(marks: Iterable) -> Manual:
-    i = o = m = f = 0
+    i = o = n = 0
+    by_type: dict[int, int] = {}
     for mk in marks:
+        n += 1
         if mk.direction == "in":
             i += 1
-        else:
+        elif mk.direction == "out":
             o += 1
-        if mk.gender == "male":
-            m += 1
-        elif mk.gender == "female":
-            f += 1
-    return Manual(i, o, m, f)
+        tid = getattr(mk, "marking_type_id", None)
+        if tid is not None:
+            by_type[tid] = by_type.get(tid, 0) + 1
+    return Manual(i, o, by_type, n)
 
 
 def compare_metric(manual: int, sakshi: int | None) -> dict:
@@ -39,15 +40,46 @@ def compare_metric(manual: int, sakshi: int | None) -> dict:
             "percent": round(diff / manual * 100, 2), "status": "ok"}
 
 
-def compare(manual: Manual, sakshi) -> dict:
-    """`sakshi` is an object with in_count/out_count/male_count/female_count or None."""
-    g = lambda n: getattr(sakshi, n, None) if sakshi is not None else None  # noqa: E731
-    s_in, s_out = g("in_count"), g("out_count")
+def _sum_direction(types: list, counts: dict, direction: str) -> int | None:
+    """Sakshi's total for a direction: the sum over that direction's markings; unknown while any current one is blank."""
+    total = 0
+    for t in types:
+        if t.direction != direction:
+            continue
+        v = counts.get(t.id)
+        if v is None:
+            if not t.archived:
+                return None
+            continue
+        total += v
+    return total
+
+
+def compare(manual: Manual, sakshi, types: list) -> dict:
+    """`sakshi` is a SakshiResult-like object (counts + the old in/out columns) or None; `types` are the project's
+    MarkingTypes. Archived types are only listed while they still have marks."""
+    counts: dict[int, int] = {}
+    legacy_in = legacy_out = None
+    if sakshi is not None:
+        counts = {int(k): v for k, v in (getattr(sakshi, "counts", None) or {}).items() if v is not None}
+        if not counts:  # saved before markings were configurable: only in/out can still be compared
+            legacy_in, legacy_out = getattr(sakshi, "in_count", None), getattr(sakshi, "out_count", None)
+    if sakshi is None:
+        s_in = s_out = None
+    elif counts:
+        s_in, s_out = _sum_direction(types, counts, "in"), _sum_direction(types, counts, "out")
+    else:
+        s_in, s_out = legacy_in, legacy_out
     s_total = s_in + s_out if s_in is not None and s_out is not None else None
+    rows = []
+    for t in types:
+        if t.archived and not manual.by_type.get(t.id):
+            continue
+        rows.append({"id": t.id, "label": t.label, "direction": t.direction, "archived": t.archived,
+                     **compare_metric(manual.by_type.get(t.id, 0), counts.get(t.id))})
     return {
         "in": compare_metric(manual.in_count, s_in),
         "out": compare_metric(manual.out_count, s_out),
         "total": compare_metric(manual.total, s_total),
-        "male": compare_metric(manual.male, g("male_count")),
-        "female": compare_metric(manual.female, g("female_count")),
+        "types": rows,
     }

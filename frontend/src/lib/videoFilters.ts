@@ -143,14 +143,3 @@ export function rangeLabel(page: number, total: number, pageSize = PAGE_SIZE): s
   const from = (page - 1) * pageSize + 1;
   return `${Math.min(from, total)}–${Math.min(page * pageSize, total)} of ${total}`;
 }
-
-/** Gender totals for a row, always all three (zeros kept). */
-export function genderParts(v: { mark_male: number; mark_female: number; mark_unknown: number }) {
-  return [
-    { key: "male" as const, letter: "M", n: v.mark_male },
-    { key: "female" as const, letter: "F", n: v.mark_female },
-    { key: "unknown" as const, letter: "?", n: v.mark_unknown },
-  ];
-}
-export const genderText = (v: { mark_male: number; mark_female: number; mark_unknown: number }) =>
-  genderParts(v).map((p) => `${p.letter} ${p.n}`).join(" · ");

@@ -38,7 +38,7 @@ def _clean(tmp_path, monkeypatch):
     monkeypatch.setattr(liveness, "live_among", lambda ids, celery_app=None: set(ids))
     yield
     with engine.begin() as c:
-        c.execute(text("truncate users, projects, videos, marks, sakshi_results, user_settings restart identity cascade"))
+        c.execute(text("truncate users, projects, videos, marks, marking_types, sakshi_results, user_settings restart identity cascade"))
 
 
 @pytest.fixture

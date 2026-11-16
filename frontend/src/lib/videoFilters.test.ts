@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkFile } from "./uploadCheck";
 import {
-  DEFAULT_FILTERS, addedRange, clearFilters, deriveProgress, genderParts, genderText, hasActiveFilters, lastPage, parseFilters,
+  DEFAULT_FILTERS, addedRange, clearFilters, deriveProgress, hasActiveFilters, lastPage, parseFilters,
   rangeLabel, serializeFilters, toApiQuery, withFilter, type Filters,
 } from "./videoFilters";
 
@@ -129,14 +129,6 @@ describe("paging labels", () => {
     expect(rangeLabel(1, 134)).toBe("1–25 of 134");
     expect(rangeLabel(6, 134)).toBe("126–134 of 134");
     expect(rangeLabel(1, 3)).toBe("1–3 of 3");
-  });
-});
-
-describe("gender label", () => {
-  it("shows all three, zeros kept", () => {
-    expect(genderText({ mark_male: 2, mark_female: 4, mark_unknown: 0 })).toBe("M 2 · F 4 · ? 0");
-    expect(genderText({ mark_male: 0, mark_female: 0, mark_unknown: 0 })).toBe("M 0 · F 0 · ? 0");
-    expect(genderParts({ mark_male: 1, mark_female: 2, mark_unknown: 3 }).map((p) => p.key)).toEqual(["male", "female", "unknown"]);
   });
 });
 

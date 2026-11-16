@@ -68,7 +68,7 @@ def test_it_deletes_the_files_and_frees_the_space_but_nothing_else(client, auth,
     # ...and everything else is exactly as it was
     assert (v.status, v.status_reason, v.duration_s, v.fps, v.width, v.height, v.vcodec, v.file_size) == ("ready", "note", 60.0, 25.0, 1920, 1080, "h264", 3000)
     marks = client.get(f"/api/videos/{vid}/marks", headers=auth).json()
-    assert [(m["direction"], m["gender"]) for m in marks] == [("in", "male"), ("out", "female"), ("in", "unknown")]
+    assert [m["direction"] for m in marks] == ["in", "out", "in"]
     cmp = client.get(f"/api/videos/{vid}/comparison", headers=auth).json()
     assert cmp["in"]["manual"] == 2 and cmp["in"]["sakshi"] == 2 and cmp["out"]["sakshi"] == 1
     assert client.get(f"/api/videos/{vid}/export.csv", headers=auth).text == before_csv
@@ -134,11 +134,12 @@ def test_new_marks_are_refused_but_existing_ones_stay_editable(client, auth, pid
     vid = add(pid, marks=[(5, "in", "male")])
     mid = client.get(f"/api/videos/{vid}/marks", headers=auth).json()[0]["id"]
     remove(client, auth, vid)
-    r = client.post(f"/api/videos/{vid}/marks", json={"time_s": 1, "direction": "in", "gender": "male"}, headers=auth)
+    types = client.get(f"/api/projects/{pid}/marking-types", headers=auth).json()
+    r = client.post(f"/api/videos/{vid}/marks", json={"time_s": 1, "marking_type_id": types[0]["id"]}, headers=auth)
     assert r.status_code == 409 and "deleted" in r.json()["detail"]
-    assert client.patch(f"/api/marks/{mid}", json={"direction": "out", "gender": "female", "time_s": 6.5}, headers=auth).status_code == 200
+    assert client.patch(f"/api/marks/{mid}", json={"marking_type_id": types[3]["id"], "time_s": 6.5}, headers=auth).status_code == 200
     assert client.put(f"/api/marks/{mid}/point", json={"x": 0.4, "y": 0.6}, headers=auth).status_code == 200
-    assert client.put(f"/api/videos/{vid}/sakshi", json={"in_count": 3}, headers=auth).status_code == 200
+    assert client.put(f"/api/videos/{vid}/sakshi", json={"counts": {types[0]["id"]: 3}}, headers=auth).status_code == 200
     assert client.get(f"/api/videos/{vid}/comparison", headers=auth).json()["out"]["manual"] == 1
     assert client.delete(f"/api/marks/{mid}", headers=auth).status_code == 204
 

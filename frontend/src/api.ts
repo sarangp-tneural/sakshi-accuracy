@@ -1,5 +1,6 @@
 import type { Bindings } from "./keys/registry";
 import type { VirtualLine } from "./lib/lines";
+import type { Metric } from "./lib/format";
 
 const TOKEN_KEY = "sv_token";
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -45,12 +46,17 @@ export interface Video {
   rtsp_url_masked: string | null; rtsp_minutes: number | null; created_at: string;
   started_at: string | null; ended_at: string | null; file_size: number | null;
   width: number | null; height: number | null; vcodec: string | null;
-  mark_total: number; mark_in: number; mark_out: number; mark_male: number; mark_female: number; mark_unknown: number; sakshi_entered: boolean; camera_id: number | null; camera_name: string | null;
+  mark_total: number; mark_in: number; mark_out: number; mark_types: Record<string, number>; sakshi_entered: boolean; camera_id: number | null; camera_name: string | null;
   video_removed_at?: string | null; disk_bytes?: number | null; // set once only the video FILE was deleted
   lines: VirtualLine[];
 }
-export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out"; gender: "male" | "female" | "unknown"; x: number | null; y: number | null }
-export type MarkFields = Pick<Mark, "time_s" | "direction" | "gender">;
+export interface MarkingType {
+  id: number; project_id: number; label: string; direction: "in" | "out" | null; key_code: string; color: string | null;
+  sort_order: number; archived: boolean; mark_count: number;
+}
+export type MarkingTypeFields = { label: string; direction: "in" | "out" | null; key_code: string; color: string | null };
+export interface Mark { id: number; video_id: number; time_s: number; direction: "in" | "out" | null; marking_type_id: number | null; x: number | null; y: number | null }
+export type MarkFields = Pick<Mark, "time_s"> & { marking_type_id: number };
 export interface Camera {
   id: number; project_id: number; name: string; rtsp_url_masked: string; default_minutes: number; created_at: string;
   lines: VirtualLine[];
@@ -61,7 +67,9 @@ export interface VideoList {
   status_counts: Record<"all" | "ready" | "connecting" | "recording" | "processing" | "partial" | "failed", number>;
   busy: boolean;
 }
-export interface Sakshi { in_count: number | null; out_count: number | null; male_count: number | null; female_count: number | null }
+export interface Sakshi { counts: Record<string, number>; legacy?: Record<string, number> | null }
+export interface TypeMetric extends Metric { id: number; label: string; direction: "in" | "out" | null; archived: boolean }
+export interface Comparison { in: Metric; out: Metric; total: Metric; types: TypeMetric[] }
 export interface UserSettings { reaction_delay_s: number; sound_enabled: boolean; slow_after_jump: boolean; key_bindings: Bindings }
 
 export const api = {
@@ -88,6 +96,11 @@ export const api = {
   stopRecording: (id: number) => req<Video>(`/videos/${id}/stop`, { method: "POST" }),
   deleteVideo: (id: number) => req<void>(`/videos/${id}`, { method: "DELETE" }),
   removeVideoFile: (id: number) => req<{ video: Video; freed_bytes: number }>(`/videos/${id}/file`, { method: "DELETE" }),
+  markingTypes: (pid: number) => req<MarkingType[]>(`/projects/${pid}/marking-types`),
+  createMarkingType: (pid: number, t: MarkingTypeFields) => req<MarkingType>(`/projects/${pid}/marking-types`, { method: "POST", body: body(t) }),
+  patchMarkingType: (id: number, t: Partial<MarkingTypeFields>) => req<MarkingType>(`/marking-types/${id}`, { method: "PATCH", body: body(t) }),
+  deleteMarkingType: (id: number) => req<void>(`/marking-types/${id}`, { method: "DELETE" }),
+  reorderMarkingTypes: (pid: number, ids: number[]) => req<MarkingType[]>(`/projects/${pid}/marking-types/order`, { method: "PUT", body: body({ ids }) }),
   marks: (vid: number) => req<Mark[]>(`/videos/${vid}/marks`),
   addMark: (vid: number, m: MarkFields) => req<Mark>(`/videos/${vid}/marks`, { method: "POST", body: body(m) }),
   patchMark: (id: number, m: Partial<MarkFields>) => req<Mark>(`/marks/${id}`, { method: "PATCH", body: body(m) }),
@@ -97,7 +110,7 @@ export const api = {
   undo: (vid: number) => req<Mark>(`/videos/${vid}/marks/last`, { method: "DELETE" }),
   sakshi: (vid: number) => req<Sakshi>(`/videos/${vid}/sakshi`),
   putSakshi: (vid: number, s: Sakshi) => req<Sakshi>(`/videos/${vid}/sakshi`, { method: "PUT", body: body(s) }),
-  comparison: (vid: number) => req<Record<string, import("./lib/format").Metric>>(`/videos/${vid}/comparison`),
+  comparison: (vid: number) => req<Comparison>(`/videos/${vid}/comparison`),
   settings: () => req<UserSettings>("/settings"),
   putSettings: (s: UserSettings) => req<UserSettings>("/settings", { method: "PUT", body: body(s) }),
   resetSettings: (action?: string) => req<UserSettings>("/settings/reset" + (action ? `?action=${action}` : ""), { method: "POST" }),

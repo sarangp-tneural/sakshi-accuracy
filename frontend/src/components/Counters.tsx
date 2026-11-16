@@ -1,17 +1,11 @@
 import { forwardRef, memo, useImperativeHandle, useRef } from "react";
+import type { MarkingType } from "../api";
+import { directionIcon, typeColor } from "../lib/markings";
 
 export interface CountersHandle { flash: (keys: string[]) => void }
-export interface CountValues { in: number; out: number; male: number; female: number; total: number }
+export interface CountValues { in: number; out: number; total: number; types: { type: MarkingType; n: number }[] }
 
-const BOXES: { key: keyof CountValues; label: string; icon: string; big?: boolean }[] = [
-  { key: "in", label: "IN", icon: "▲", big: true },
-  { key: "out", label: "OUT", icon: "▼", big: true },
-  { key: "male", label: "Male", icon: "♂" },
-  { key: "female", label: "Female", icon: "♀" },
-  { key: "total", label: "Total", icon: "Σ" },
-];
-
-/** Fixed-size boxes; the flash only animates background-color (no layout change). */
+/** Fixed-size boxes; the flash only animates background-color (no layout change). Flash keys: "in", "out", "total", "t:<marking id>". */
 const Counters = forwardRef<CountersHandle, { counts: CountValues }>(function Counters({ counts }, ref) {
   const els = useRef<Record<string, HTMLDivElement | null>>({});
   useImperativeHandle(ref, () => ({
@@ -20,14 +14,18 @@ const Counters = forwardRef<CountersHandle, { counts: CountValues }>(function Co
       for (const k of keys) els.current[k]?.animate([{ backgroundColor: "var(--flash)" }, { backgroundColor: "var(--surface)" }], { duration: 450 });
     },
   }), []);
+  const box = (key: string, cls: string, label: React.ReactNode, n: number, color?: string) => (
+    <div key={key} ref={(el) => { els.current[key] = el; }} className={`counter ${cls}`}>
+      <span className="cl" style={color ? { color } : undefined}>{label}</span>
+      <b className="num" style={color ? { color } : undefined}>{n}</b>
+    </div>
+  );
   return (
     <div className="counters" role="group" aria-label="Live counts">
-      {BOXES.map((b) => (
-        <div key={b.key} ref={(el) => { els.current[b.key] = el; }} className={`counter c-${b.key} ${b.big ? "big" : ""}`}>
-          <span className="cl"><span aria-hidden>{b.icon}</span> {b.label}</span>
-          <b className="num">{counts[b.key]}</b>
-        </div>
-      ))}
+      {box("in", "c-in big", <><span aria-hidden>▲</span> IN</>, counts.in)}
+      {box("out", "c-out big", <><span aria-hidden>▼</span> OUT</>, counts.out)}
+      {counts.types.map(({ type, n }) => box("t:" + type.id, "c-type", <><span aria-hidden>{directionIcon(type.direction)}</span> {type.label}</>, n, typeColor(type)))}
+      {box("total", "c-total", <><span aria-hidden>Σ</span> Total</>, counts.total)}
     </div>
   );
 });

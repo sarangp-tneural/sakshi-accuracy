@@ -21,9 +21,9 @@ def test_list_has_mark_counts_and_sakshi_flag(client, auth, video):
     add_marks(video, uid, [("in", "male"), ("in", "female"), ("in", "unknown"), ("out", "male")])
     rows = client.get(f"/api/projects/{client.get('/api/projects', headers=auth).json()[0]['id']}/videos", headers=auth).json()["items"]
     v = next(r for r in rows if r["id"] == video)
-    assert (v["mark_total"], v["mark_in"], v["mark_out"], v["mark_male"], v["mark_female"]) == (4, 3, 1, 2, 1)
+    assert (v["mark_total"], v["mark_in"], v["mark_out"]) == (4, 3, 1)
     assert v["sakshi_entered"] is False
-    client.put(f"/api/videos/{video}/sakshi", json={"in_count": 3}, headers=auth)
+    client.put(f"/api/videos/{video}/sakshi", json={"counts": {1: 3}}, headers=auth)
     assert client.get(f"/api/videos/{video}", headers=auth).json()["sakshi_entered"] is True
     one = client.get(f"/api/videos/{video}", headers=auth).json()
     assert one["mark_total"] == 4
@@ -31,7 +31,7 @@ def test_list_has_mark_counts_and_sakshi_flag(client, auth, video):
 
 def test_videos_without_marks_have_zero_counts(client, auth, video):
     one = client.get(f"/api/videos/{video}", headers=auth).json()
-    assert (one["mark_total"], one["mark_male"], one["sakshi_entered"]) == (0, 0, False)
+    assert (one["mark_total"], one["mark_types"], one["sakshi_entered"]) == (0, {}, False)
 
 
 def test_upload_records_file_size(client, auth, monkeypatch):

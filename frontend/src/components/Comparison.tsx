@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
-import { api, type Sakshi } from "../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, type Comparison, type MarkingType, type Sakshi } from "../api";
 import { fmtDiff, fmtPercent, type Metric } from "../lib/format";
+import { activeTypes, directionIcon } from "../lib/markings";
 import { SEVERITY_LABEL, severityOf } from "../lib/severity";
 import { Button, EmptyState, Field, LoadError, Spinner } from "./ui/bits";
 import { useToast } from "./ui/Toast";
 
-const ROWS: [string, string][] = [["in", "▲ IN"], ["out", "▼ OUT"], ["total", "Σ Total"], ["male", "♂ Male"], ["female", "♀ Female"]];
-const FIELDS: [keyof Sakshi, string][] = [["in_count", "IN"], ["out_count", "OUT"], ["male_count", "Male"], ["female_count", "Female"]];
-type Form = Record<keyof Sakshi, string>;
-const EMPTY: Form = { in_count: "", out_count: "", male_count: "", female_count: "" };
-const toForm = (s: Sakshi): Form => Object.fromEntries(FIELDS.map(([k]) => [k, s[k] === null ? "" : String(s[k])])) as Form;
+type Form = Record<number, string>;
+const toForm = (s: Sakshi, types: MarkingType[]): Form =>
+  Object.fromEntries(types.map((t) => [t.id, s.counts[String(t.id)] === undefined ? "" : String(s.counts[String(t.id)])]));
+const LEGACY_LABEL: Record<string, string> = { in: "IN", out: "OUT", male: "Male", female: "Female" };
 
 function Cell({ m, kind }: { m: Metric | undefined; kind: "sakshi" | "diff" | "pct" }) {
   if (!m) return <span className="muted">…</span>;
@@ -20,41 +20,58 @@ function Cell({ m, kind }: { m: Metric | undefined; kind: "sakshi" | "diff" | "p
   return m.percent === null ? <span className="na">not defined</span> : <span className={`sev ${sev} num`}>{fmtPercent(m)}</span>;
 }
 
-export default function SakshiComparison({ videoId, marksVersion, onExport }: { videoId: number; marksVersion: number; onExport: () => void }) {
-  const [form, setForm] = useState<Form>(EMPTY);
-  const [saved, setSaved] = useState<Form>(EMPTY);
-  const [cmp, setCmp] = useState<Record<string, Metric> | null>(null);
+export default function SakshiComparison({ videoId, types, marksVersion, onExport }: { videoId: number; types: MarkingType[]; marksVersion: number; onExport: () => void }) {
+  const fields = useMemo(() => activeTypes(types), [types]);
+  const [form, setForm] = useState<Form>({});
+  const [saved, setSaved] = useState<Form>({});
+  const [legacy, setLegacy] = useState<Sakshi["legacy"]>(null);
+  const [cmp, setCmp] = useState<Comparison | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [loadErr, setLoadErr] = useState("");
   const [saving, setSaving] = useState(false);
-  const [errs, setErrs] = useState<Partial<Record<keyof Sakshi, string>>>({});
+  const [errs, setErrs] = useState<Record<number, string>>({});
   const toast = useToast();
+  const serverCounts = useRef<Sakshi["counts"]>({});
 
   const refresh = () => api.comparison(videoId).then(setCmp).catch((e) => toast.error(e));
   const load = () => {
     setState("loading");
-    api.sakshi(videoId).then((s) => { setForm(toForm(s)); setSaved(toForm(s)); setState("ok"); })
+    api.sakshi(videoId).then((s) => { serverCounts.current = s.counts; setLegacy(s.legacy ?? null); setState("ok"); })
       .catch((e) => { setLoadErr(e.message); setState("error"); });
   };
   useEffect(load, [videoId]); // eslint-disable-line
-  useEffect(() => { const t = setTimeout(refresh, 400); return () => clearTimeout(t); }, [videoId, marksVersion]); // eslint-disable-line
+  // the form follows the project's markings; typed-but-unsaved text for markings that still exist is kept
+  useEffect(() => {
+    if (state !== "ok") return;
+    const fresh = toForm({ counts: serverCounts.current }, fields);
+    setSaved(fresh);
+    setForm((cur) => Object.fromEntries(fields.map((t) => [t.id, cur[t.id] !== undefined ? cur[t.id] : fresh[t.id]])));
+  }, [state, fields]);
+  useEffect(() => { const t = setTimeout(refresh, 400); return () => clearTimeout(t); }, [videoId, marksVersion, types]); // eslint-disable-line
 
-  const dirty = FIELDS.some(([k]) => form[k] !== saved[k]);
+  const dirty = fields.some((t) => (form[t.id] ?? "") !== (saved[t.id] ?? ""));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    const next: typeof errs = {};
-    for (const [k] of FIELDS) {
-      const v = form[k].trim();
-      if (v !== "" && (!/^\d+$/.test(v))) next[k] = "Whole number, 0 or more";
+    const next: Record<number, string> = {};
+    for (const t of fields) {
+      const v = (form[t.id] ?? "").trim();
+      if (v !== "" && !/^\d+$/.test(v)) next[t.id] = "Whole number, 0 or more";
     }
     setErrs(next);
     if (Object.keys(next).length) return;
-    const body = Object.fromEntries(FIELDS.map(([k]) => [k, form[k].trim() === "" ? null : Number(form[k])])) as unknown as Sakshi;
+    const counts: Sakshi["counts"] = {};
+    for (const t of fields) { const v = (form[t.id] ?? "").trim(); if (v !== "") counts[String(t.id)] = Number(v); }
     setSaving(true);
-    try { await api.putSakshi(videoId, body); setSaved(form); await refresh(); toast.success("Sakshi result saved"); }
+    try { const s = await api.putSakshi(videoId, { counts }); serverCounts.current = s.counts; setSaved({ ...form }); setLegacy(s.legacy ?? null); await refresh(); toast.success("Sakshi result saved"); }
     catch (x) { toast.error(x); } finally { setSaving(false); }
   }
+
+  const rows: { key: string; label: string; m: Metric | undefined }[] = [
+    { key: "in", label: "▲ IN", m: cmp?.in }, { key: "out", label: "▼ OUT", m: cmp?.out }, { key: "total", label: "Σ Total", m: cmp?.total },
+    ...(cmp?.types ?? []).map((t) => ({ key: `t${t.id}`, label: `${directionIcon(t.direction)} ${t.label}${t.archived ? " (removed)" : ""}`, m: t as Metric })),
+  ];
+  const legacyOnly = legacy && !Object.keys(serverCounts.current).length;
 
   return (
     <section className="card result" id="result">
@@ -63,29 +80,35 @@ export default function SakshiComparison({ videoId, marksVersion, onExport }: { 
       {state === "error" && <LoadError message={loadErr} onRetry={load} />}
       {state === "ok" && (
         <form className="row sakshi-form" onSubmit={save} noValidate>
-          {FIELDS.map(([k, label]) => (
-            <Field key={k} label={label} htmlFor={`sk-${k}`} error={errs[k]} hint="blank = not entered">
-              <input id={`sk-${k}`} type="number" inputMode="numeric" min={0} step={1} value={form[k]} aria-invalid={!!errs[k]} placeholder="—"
-                onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+          {fields.map((t) => (
+            <Field key={t.id} label={`${directionIcon(t.direction)} ${t.label}`} htmlFor={`sk-${t.id}`} error={errs[t.id]} hint="blank = not entered">
+              <input id={`sk-${t.id}`} type="number" inputMode="numeric" min={0} step={1} value={form[t.id] ?? ""} aria-invalid={!!errs[t.id]} placeholder="—"
+                onChange={(e) => setForm({ ...form, [t.id]: e.target.value })} />
             </Field>
           ))}
+          {!fields.length && <span className="small muted">This project has no markings. Add some in Settings.</span>}
           <Button variant="primary" type="submit" disabled={saving || !dirty}>{saving ? "Saving…" : "Save"}</Button>
           {dirty && <span className="small muted" role="status">Unsaved changes</span>}
         </form>
+      )}
+      {legacyOnly && (
+        <p className="small muted" style={{ margin: 0 }}>
+          Entered before markings were configurable: {Object.entries(legacy!).map(([k, v]) => `${LEGACY_LABEL[k] ?? k} ${v}`).join(" · ")}. IN and OUT still compare; fill in the fields above to compare each marking.
+        </p>
       )}
       <table className="table cmp">
         <caption className="sr-only">Manual count versus Sakshi, difference is Sakshi minus manual</caption>
         <thead><tr><th scope="col">Metric</th><th scope="col">Manual</th><th scope="col">Sakshi</th><th scope="col">Difference</th><th scope="col">% of manual</th></tr></thead>
         <tbody>
-          {ROWS.map(([k, label]) => { const m = cmp?.[k]; return (
-            <tr key={k}><th scope="row">{label}</th><td className="num">{m?.manual ?? "…"}</td><td><Cell m={m} kind="sakshi" /></td><td><Cell m={m} kind="diff" /></td><td><Cell m={m} kind="pct" /></td></tr>
-          ); })}
+          {rows.map(({ key, label, m }) => (
+            <tr key={key}><th scope="row">{label}</th><td className="num">{m?.manual ?? "…"}</td><td><Cell m={m} kind="sakshi" /></td><td><Cell m={m} kind="diff" /></td><td><Cell m={m} kind="pct" /></td></tr>
+          ))}
         </tbody>
       </table>
       <p className="small muted" style={{ margin: 0 }}>
         Difference = Sakshi − manual. ✓ within 5% · ! 5–15% · ✕ over 15%. “not entered” and “not defined” are not zero.
       </p>
-      {cmp && state === "ok" && !Object.values(cmp).some((m) => m.manual) && <EmptyState title="No manual marks yet">Count while watching, then compare here.</EmptyState>}
+      {cmp && state === "ok" && !cmp.total.manual && !cmp.types.some((m) => m.manual) && <EmptyState title="No manual marks yet">Count while watching, then compare here.</EmptyState>}
     </section>
   );
 }

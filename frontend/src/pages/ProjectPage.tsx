@@ -14,9 +14,9 @@ export default function ProjectPage({ tab }: { tab: "videos" | "settings" }) {
       {tab === "videos" ? <VideosTab key={pid} projectId={pid} name={name} /> : (
         <>
           <ProjectHeader pid={pid} name={name} tab="settings" />
-          <div className="card" style={{ maxWidth: 680 }}>
-            <p className="muted small" style={{ marginTop: 0 }}>These settings belong to your account and apply to every project and video.</p>
-            <SettingsPanel />
+          <div className="card" style={{ maxWidth: 760 }}>
+            <p className="muted small" style={{ marginTop: 0 }}>Markings belong to this project. The player and counting settings below belong to your account and apply to every project.</p>
+            <SettingsPanel projectId={pid} />
           </div>
         </>
       )}

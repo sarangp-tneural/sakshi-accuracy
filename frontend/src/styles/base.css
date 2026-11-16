@@ -233,3 +233,5 @@ a.vname:hover { text-decoration: underline; color: var(--primary); }
 .pcard-wrap:hover .pc-del, .pc-del:focus-visible { opacity: 1; }
 .pc-del:hover { background: var(--surface-2); border-color: var(--border); }
 .pcard-wrap:hover .pc-open { opacity: 0; }
+.keyrow.mk-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.keyrow.mk-new { margin-top: var(--s-2); border-top: 2px solid var(--border); }

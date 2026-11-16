@@ -7,7 +7,7 @@ const base: Video = {
   id: 1, project_id: 1, name: "cam", source: "upload", status: "ready", status_reason: null, duration_s: 127.8, fps: 25,
   rtsp_url_masked: null, rtsp_minutes: null, created_at: "2026-11-10T12:47:31Z", started_at: null, ended_at: null,
   file_size: 40_500_000, width: 1920, height: 1080, vcodec: "h264",
-  mark_total: 0, mark_in: 0, mark_out: 0, mark_male: 0, mark_female: 0, mark_unknown: 0, sakshi_entered: false, camera_id: null, camera_name: null, lines: [],
+  mark_total: 0, mark_in: 0, mark_out: 0, mark_types: {}, sakshi_entered: false, camera_id: null, camera_name: null, lines: [],
 };
 const rtsp = (o: Partial<Video> = {}): Video => ({ ...base, source: "rtsp", rtsp_url_masked: "rtsp://***:***@10.0.0.5:554/ch1", rtsp_minutes: 5,
   started_at: "2026-11-10T12:00:00Z", ended_at: "2026-11-10T12:05:00Z", duration_s: 300, ...o });
@@ -39,14 +39,12 @@ describe("videoDetails: uploads", () => {
     expect(get(d, "Video")?.value).toBe("1920×1080 · 25 fps · H.264");
     expect(get(d, "File size")?.value).toBe("38.6 MB");
     expect(get(d, "Marks")).toMatchObject({ value: "none yet", tone: "muted" });
-    expect(get(d, "Gender")).toBeUndefined();
     expect(get(d, "Sakshi result")).toMatchObject({ value: "not entered", tone: "muted" });
     expect(get(d, "Stream")).toBeUndefined();
   });
-  it("shows mark and gender totals, including unknown", () => {
-    const d = videoDetails({ ...base, mark_total: 10, mark_in: 6, mark_out: 4, mark_male: 3, mark_female: 5, mark_unknown: 2, sakshi_entered: true }, 0);
+  it("shows mark totals with IN and OUT", () => {
+    const d = videoDetails({ ...base, mark_total: 10, mark_in: 6, mark_out: 4, sakshi_entered: true }, 0);
     expect(get(d, "Marks")?.value).toBe("10 · ▲ IN 6 · ▼ OUT 4");
-    expect(get(d, "Gender")?.value).toBe("♂ 3 · ♀ 5 · ? 2");
     expect(get(d, "Sakshi result")).toMatchObject({ value: "entered", tone: "good" });
   });
 });

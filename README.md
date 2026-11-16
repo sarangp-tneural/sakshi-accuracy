@@ -46,7 +46,7 @@ API: `GET/POST /api/projects/{id}/cameras`, `PATCH/DELETE /api/cameras/{id}`, `P
 ## Videos screen
 A project's **Videos** tab is a table (one row per video). **+ Upload video** and **● Record from camera** (top right) open dialogs; you can also **drag files anywhere on the page** to upload (progress shows as a row at the top of the list, so nothing blocks you).
 
-Columns: name, source, status (Recording shows elapsed / total and a Stop button), duration, marks (IN / OUT), gender (M / F / ?), Sakshi entered or not, added. **Count** opens the video; Export and Delete are under **⋯** (Delete says which marks and Sakshi result go with it). Click a row to open it, or the ▸ to expand the details (RTSP stream, requested / started / ended, recorded vs planned, video info, file size, why a recording is partial or failed).
+Columns: name, source, status (Recording shows elapsed / total and a Stop button), duration, marks (IN / OUT), Sakshi entered or not, added. **Count** opens the video; Export and Delete are under **⋯** (Delete says which marks and Sakshi result go with it). Click a row to open it, or the ▸ to expand the details (RTSP stream, requested / started / ended, recorded vs planned, video info, file size, why a recording is partial or failed).
 
 Search by name, filter by status (chips with counts), source, progress (not started / counting / compared) and date added, and sort. Everything is in the URL, so a refresh or a shared link keeps it. Lists are paged (25 per page). The page only polls the server while something is recording or processing.
 
@@ -59,7 +59,7 @@ Videos created before file size / resolution were stored show "—" there. Fill 
 Each recording is stored twice (the original and the playable copy). On the Videos screen, a row's `⋯` menu has **Delete video file…**: it deletes just those files and keeps the row, marks and counts, the Sakshi result, the comparison, export and all details. It cannot be undone, and it is only offered for finished videos (Ready, Partial, Failed). Sort by **Largest file** to find what to delete. The Count screen of such a video shows a "Video not available" placeholder; existing marks can still be edited or deleted and the Sakshi result entered, but new marks cannot be added. The API is `DELETE /api/videos/{id}/file`; the full **Delete…** still removes everything. Apply the migration with `cd backend && uv run alembic upgrade head`.
 
 ## Player (review-style controls)
-- **Timeline** (under the video): drag to scrub, click a marker to select it, **Ctrl + wheel** zooms, **Shift + wheel** pans, `− + ⤢` buttons. IN markers on the upper row, OUT on the lower; the ring colour is the gender; a diamond means the mark has a point.
+- **Timeline** (under the video): drag to scrub, click a marker to select it, **Ctrl + wheel** zooms, **Shift + wheel** pans, `− + ⤢` buttons. IN markers on the upper row, OUT on the lower, markings with no direction on a middle row that appears when you have some; the colour is the marking's colour; a diamond means the mark has a point.
 - **Picture zoom:** Ctrl + wheel on the video (up to 8x), drag to pan, **Reset** in the badge.
 - **Points:** on a mark use 📍 to pause on its frame, then click where the person is (Esc cancels). Points are saved with the mark (`x`, `y` as 0..1 of the picture), drawn on the video near the playhead, and exported to CSV/Excel. Toggle with **📍 Points**.
 - **▶ on a mark** replays 2 s before to 2 s after. **go to 1:23** jumps to a time. Left/Right (and the step buttons) move as many frames as the playback speed: 1x = 1 frame, 2x = 2, 3x = 3, 4x = 4. After clicking the timeline the arrows work straight away, and holding a key keeps stepping (one seek at a time, so every shown frame is a real step). The step uses the measured frame gap and always lands on an exact frame.
@@ -67,10 +67,12 @@ Each recording is stored twice (the original and the playable copy). On the Vide
 **Smooth frame stepping needs frequent keyframes.** New uploads and recordings get a playback copy with a keyframe about every second (a plain copy is kept only when the source already has that). For videos processed earlier, rebuild their playback copy once (originals are never touched):
 `uv run --project backend python scripts/reprocess_playback.py --all --dry-run` to see them, then without `--dry-run` (or pass video ids).
 
-## Default keys (all changeable in Settings ⚙)
-Left hand = male, right hand = female; index = IN, middle = OUT.
-`F` male IN · `D` male OUT · `J` female IN · `K` female OUT · `G` IN (unknown) · `H` OUT (unknown) ·
-`Space` play/pause · `Z` undo · `X` back 3 s · `1–4` speed · `←/→` frame step.
+## Markings and keys
+**What you count is set per project**, under the project's **Settings** tab (or **⚙ Settings** while counting). Each marking has a name, a colour, a key and a direction: **IN**, **OUT** or **no direction**. IN/OUT markings add to the IN/OUT totals; a marking with no direction, such as "Greeting", is counted on its own. Add one, rename it, change its key, reorder it or remove it. Removing a marking that already has marks keeps those marks with their name; its key is freed.
+The **Sakshi result form is built from these markings** (one field per marking), and the comparison and exports list them too. Results entered before this existed keep their IN / OUT values (still compared) and are shown as a note.
+
+New projects start with: `F` male IN · `D` male OUT · `J` female IN · `K` female OUT · `G` IN (unknown) · `H` OUT (unknown). These are ordinary markings and can be changed or removed.
+Player keys (per account, changeable in Settings): `Space` play/pause · `Z` undo · `X` back 3 s · `1–4` speed · `←/→` frame step. A key can't be used twice, across markings and player keys.
 Mark time = video time − reaction delay × speed (default delay 0.4 s).
 
 ## How to test with a real video
