@@ -59,7 +59,7 @@ export default function CameraCard({ camera: c, now, starting, onStart, onStop, 
           </Button>
           <label className="sr-only" htmlFor={selectId}>Length of this recording</label>
           <select id={selectId} value={minutes} disabled={starting} onChange={(e) => setMinutes(Number(e.target.value))}>
-            {lengthOptions(c.default_minutes).map((m) => <option key={m} value={m}>{m} min{m === c.default_minutes ? " (default)" : ""}</option>)}
+            {lengthOptions(c.default_minutes).map((m) => <option key={m} value={m}>{m} min</option>)}
           </select>
         </div>
       )}
