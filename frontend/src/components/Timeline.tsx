@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, type RefObject } from "react";
 import { fmtClock, fmtTime } from "../lib/format";
-import { ensureVisible, fullView, hitMarker, panView, rulerStep, timeToX, visibleSlice, xToTime, zoomView, type View } from "../lib/timelineView";
+import { ensureVisible, fullView, hitMarker, layoutY, panView, rulerStep, timeToX, visibleSlice, xToTime, zoomView, type View } from "../lib/timelineView";
 import { useTick } from "../lib/useTick";
 import { Button } from "./ui/bits";
 
@@ -105,9 +105,14 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
     // markers
     const [lo, hi] = visibleSlice(times.current, v, 0.5);
     const dense = hi - lo > DENSE;
-    for (let i = lo; i < hi; i++) {
+    const ys = dense ? null : layoutY(ms, v, W, ROW, RULER + 10, H - 10);
+    const order: number[] = [];
+    let selIdx = -1;
+    for (let i = lo; i < hi; i++) { if (ms[i].id === sel) selIdx = i; else order.push(i); }
+    if (selIdx >= 0) order.push(selIdx); // selected marker last, so it is on top
+    for (const i of order) {
       const m = ms[i];
-      const x = timeToX(m.time_s, v, W), y = ROW[m.direction ?? "other"];
+      const x = timeToX(m.time_s, v, W), y = ys ? ys[i] : ROW[m.direction ?? "other"];
       const isSel = m.id === sel;
       g.fillStyle = m.color ?? (m.direction ? col[m.direction] : col.text);
       if (dense && !isSel) { g.fillRect(x - 1, y - 10, 2, 20); continue; }
@@ -174,7 +179,12 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
     const r = canvas.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const hit = (x: number, y: number) => hitMarker(live.current.marks, view.current, width.current, x, y, rowsFor(height.current, live.current.hasOther), 12);
+  const hit = (x: number, y: number) => {
+    const { marks: ms, hasOther } = live.current, v = view.current, W = width.current, H = height.current, rows = rowsFor(H, hasOther);
+    const [lo, hi] = visibleSlice(times.current, v, 0);
+    const ys = hi - lo > DENSE ? undefined : layoutY(ms, v, W, rows, RULER + 10, H - 10);
+    return hitMarker(ms, v, W, x, y, rows, 12, ys);
+  };
 
   const showTip = (x: number, y: number) => {
     const el = tip.current; if (!el) return;
