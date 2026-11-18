@@ -24,7 +24,7 @@ interface Props {
   muted: boolean;
   pickMode: boolean;
   lines: VirtualLine[]; // always drawn
-  roi: Roi | null; // the door area (shown only while editRoi)
+  roi: Roi | null; // the focus area (shown only while editRoi)
   editRoi: boolean;
   onRoiChange: (roi: Roi) => void;
   editLines: boolean; // when on, dragging on the picture draws / edits lines instead of play + pan

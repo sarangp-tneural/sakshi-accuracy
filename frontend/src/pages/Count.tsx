@@ -71,10 +71,10 @@ export default function Count() {
   // virtual lines: shown on the video always, editable here (this video only; the camera and other videos are not touched)
   const [lines, setLines] = useState<VirtualLine[]>([]);
   const [editLines, setEditLines] = useState(false);
-  // door area: changes elsewhere in the picture are ignored when looking for still moments
+  // focus area: changes elsewhere in the picture are ignored when looking for still moments
   const [roi, setRoi] = useState<Roi | null>(null);
   const [editRoi, setEditRoi] = useState(false);
-  const [stillsKey, setStillsKey] = useState(0); // bump to fetch the index again (it is redone after the door area changes)
+  const [stillsKey, setStillsKey] = useState(0); // bump to fetch the index again (it is redone after the focus area changes)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [linesSaving, setLinesSaving] = useState<"idle" | "saving" | "error">("idle");
   const pendingLines = useRef<VirtualLine[] | null>(null);
@@ -383,9 +383,9 @@ export default function Count() {
                   disabled={!stills}
                   onClick={() => { setSkipStills((s) => { try { localStorage.setItem("sv_skipstills", s ? "0" : "1"); } catch { /* ignore */ } return !s; }); setTimeout(focusStage, 0); }}>
                   <span aria-hidden>⏭</span><span className="tl-label"> Skip still moments</span></Button>}
-                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editRoi} title="Mark the door area, so changes elsewhere are ignored when skipping still moments"
+                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editRoi} title="Mark the area to watch, so changes elsewhere are ignored when skipping still moments"
                   onClick={() => { setEditRoi((e) => !e); setEditLines(false); setTimeout(focusStage, 0); }}>
-                  <span aria-hidden>🚪</span><span className="tl-label"> Door area{roi ? " ✓" : ""}</span></Button>}
+                  <span aria-hidden>🎯</span><span className="tl-label"> Focus area{roi ? " ✓" : ""}</span></Button>}
                 {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editLines} title="Draw or edit the virtual lines on this video"
                   onClick={() => { setEditLines((e) => !e); setEditRoi(false); setSelectedLineId(null); setTimeout(focusStage, 0); }}>
                   <span aria-hidden>📏</span><span className="tl-label"> Lines{lines.length ? ` (${lines.length})` : ""}</span></Button>}
@@ -422,7 +422,7 @@ export default function Count() {
           <Counters ref={counters} counts={counts} />
           {editRoi && !noVideo && (
             <section className="card">
-              <h3>Door area</h3>
+              <h3>Focus area</h3>
               <p className="small muted">Drag on the picture to draw it, drag inside to move it, drag a corner to resize. Only changes inside it count when skipping still moments.</p>
               <Button size="sm" disabled={!roi} onClick={() => changeRoi(null)}>Use the whole picture</Button>
             </section>

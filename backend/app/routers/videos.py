@@ -231,7 +231,7 @@ def _stills_path(v: Video) -> Path:
 
 @router.put("/videos/{video_id}/roi", response_model=VideoOut)
 def put_video_roi(video_id: int, body: RoiIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Set (or clear) the door area used to find still moments, and redo that analysis."""
+    """Set (or clear) the focus area used to find still moments, and redo that analysis."""
     v = get_video(db, user, video_id)
     v.roi = body.roi.model_dump() if body.roi else None
     db.commit()

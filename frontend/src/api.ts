@@ -40,7 +40,7 @@ export interface Project {
   video_count: number; recording_count: number; connecting_count: number; processing_count: number; failed_count: number; camera_count: number;
   mark_total: number; mark_in: number; mark_out: number; compared_count: number; total_duration_s: number; last_activity_at: string | null;
 }
-export interface Roi { x: number; y: number; w: number; h: number } // the door area, 0..1
+export interface Roi { x: number; y: number; w: number; h: number } // the focus area, 0..1
 export interface Video {
   id: number; project_id: number; name: string; source: "upload" | "rtsp";
   status: "connecting" | "processing" | "ready" | "recording" | "partial" | "failed";
@@ -63,6 +63,7 @@ export type MarkFields = Pick<Mark, "time_s"> & { marking_type_id: number };
 export interface Camera {
   id: number; project_id: number; name: string; rtsp_url_masked: string; default_minutes: number; created_at: string;
   lines: VirtualLine[];
+  roi?: Roi | null;
   last_recorded_at: string | null; recording_video_id: number | null; recording_status: "connecting" | "recording" | null; recording_note: string | null; recording_started_at: string | null; recording_created_at: string | null; recording_minutes: number | null;
 }
 export interface VideoList {
@@ -141,6 +142,7 @@ export const api = {
   /** The still-moment index; null while the server is still working on it (202). */
   keyframes: (id: number) => req<Keyframes | { detail: string }>(`/videos/${id}/keyframes`).then((k) => ("kept" in k ? k : null)),
   redoKeyframes: (id: number) => req<unknown>(`/videos/${id}/keyframes`, { method: "POST" }),
+  putCameraRoi: (id: number, roi: Roi | null) => req<Camera>(`/cameras/${id}/roi`, { method: "PUT", body: body({ roi }) }),
   putVideoRoi: (id: number, roi: Roi | null) => req<Video>(`/videos/${id}/roi`, { method: "PUT", body: body({ roi }) }),
   putVideoLines: (id: number, lines: VirtualLine[]) => req<Video>(`/videos/${id}/lines`, { method: "PUT", body: body({ lines }) }),
   deleteCamera: (id: number) => req<void>(`/cameras/${id}`, { method: "DELETE" }),

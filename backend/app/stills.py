@@ -1,6 +1,6 @@
 """Find the "meaningful" moments of a video so a reviewer can skip the near-identical ones.
 
-The video is sampled (SAMPLE_FPS) into tiny grey frames, optionally cropped to the door area. A frame is KEPT when it differs
+The video is sampled (SAMPLE_FPS) into tiny grey frames, optionally cropped to the focus area. A frame is KEPT when it differs
 from the last kept frame (perceptual hash or pixel difference), and always when MAX_GAP_S passed since the last kept one.
 Only reads the playable copy; the result is a small JSON file next to it. No video file is ever modified.
 """

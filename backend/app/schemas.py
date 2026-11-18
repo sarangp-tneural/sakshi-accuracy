@@ -57,7 +57,7 @@ class LinesIn(BaseModel):
 
 
 class Roi(BaseModel):
-    """The door area, in normalised 0..1 frame coordinates."""
+    """The focus area, in normalised 0..1 frame coordinates."""
     x: Unit
     y: Unit
     w: Annotated[float, Field(gt=0.02, le=1)]
@@ -66,7 +66,7 @@ class Roi(BaseModel):
     @model_validator(mode="after")
     def _inside(self):
         if self.x + self.w > 1.0001 or self.y + self.h > 1.0001:
-            raise ValueError("The door area must stay inside the picture")
+            raise ValueError("The focus area must stay inside the picture")
         return self
 
 

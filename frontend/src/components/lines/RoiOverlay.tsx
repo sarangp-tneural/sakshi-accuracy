@@ -12,7 +12,7 @@ interface Props {
 
 type Drag = { part: RoiPart | "new"; sx: number; sy: number; orig: Roi | null };
 
-/** The door area: drag on the picture to draw it, drag inside to move it, drag a corner to resize it. Coordinates are 0..1. */
+/** The focus area: drag on the picture to draw it, drag inside to move it, drag a corner to resize it. Coordinates are 0..1. */
 export default function RoiOverlay({ roi, box, onChange }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [draft, setDraft] = useState<Roi | null>(null);
@@ -47,7 +47,7 @@ export default function RoiOverlay({ roi, box, onChange }: Props) {
   return (
     <svg ref={svg} className="lines-overlay editing" data-ui style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
       viewBox={`0 0 ${Math.max(1, box.w)} ${Math.max(1, box.h)}`} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-      aria-label="Door area">
+      aria-label="Focus area">
       {shown && (
         <g>
           <path fillRule="evenodd" fill="rgba(0,0,0,.45)" d={`M0 0H${box.w}V${box.h}H0Z M${x} ${y}h${w}v${h}h${-w}Z`} />

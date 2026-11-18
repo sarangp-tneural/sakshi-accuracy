@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { VirtualLine } from "../../lib/lines";
+import type { Roi } from "../../api";
+import RoiOverlay from "./RoiOverlay";
 import LinesOverlay, { type BoxPx } from "./LinesOverlay";
 
 /** A still image (the camera preview) with the lines drawn exactly over the picture. */
-export default function ImageWithLines({ src, alt, lines, editing, selectedId, onSelect, onChange }: {
+export default function ImageWithLines({ src, alt, lines, editing, selectedId, onSelect, onChange, roi, editingRoi, onRoiChange }: {
   src: string; alt: string; lines: VirtualLine[]; editing: boolean; selectedId: string | null;
   onSelect: (id: string | null) => void; onChange: (lines: VirtualLine[]) => void;
+  roi?: Roi | null; editingRoi?: boolean; onRoiChange?: (roi: Roi) => void; // the focus area, drawn while editingRoi
 }) {
   const img = useRef<HTMLImageElement>(null);
   const [box, setBox] = useState<BoxPx>({ x: 0, y: 0, w: 0, h: 0 });
@@ -23,6 +26,7 @@ export default function ImageWithLines({ src, alt, lines, editing, selectedId, o
         const el = img.current; if (el) setBox({ x: el.offsetLeft, y: el.offsetTop, w: el.clientWidth, h: el.clientHeight });
       }} />
       {box.w > 0 && <LinesOverlay lines={lines} box={box} editing={editing} selectedId={selectedId} onSelect={onSelect} onChange={onChange} />}
+      {box.w > 0 && editingRoi && onRoiChange && <RoiOverlay roi={roi ?? null} box={box} onChange={onRoiChange} />}
     </div>
   );
 }

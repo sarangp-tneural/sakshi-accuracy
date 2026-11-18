@@ -125,7 +125,7 @@ def put_camera_lines(camera_id: int, body: LinesIn, db: Session = Depends(get_db
 
 @router.put("/cameras/{camera_id}/roi", response_model=CameraOut)
 def put_camera_roi(camera_id: int, body: RoiIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Set (or clear) the door area. Only recordings started afterwards get it; existing videos keep their own."""
+    """Set (or clear) the focus area. Only recordings started afterwards get it; existing videos keep their own."""
     c = get_camera(db, user, camera_id)
     c.roi = body.roi.model_dump() if body.roi else None
     db.commit()

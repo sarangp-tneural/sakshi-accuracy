@@ -61,7 +61,7 @@ class Camera(Base):
     default_minutes: Mapped[int] = mapped_column(Integer, default=30)
     # virtual reference lines drawn on the view; copied into each video recorded from this camera
     lines: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
-    # door area {x, y, w, h} (normalised 0..1) used to ignore changes elsewhere when skipping still moments; null = whole frame
+    # focus area {x, y, w, h} (normalised 0..1) used to ignore changes elsewhere when skipping still moments; null = whole frame
     roi: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
@@ -97,7 +97,7 @@ class Video(Base):
     vcodec: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # virtual reference lines (normalised 0..1); start as a copy of the camera's, then edited per video
     lines: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
-    # door area {x, y, w, h} (normalised 0..1) used to ignore changes elsewhere when skipping still moments; null = whole frame
+    # focus area {x, y, w, h} (normalised 0..1) used to ignore changes elsewhere when skipping still moments; null = whole frame
     roi: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     marks: Mapped[list["Mark"]] = relationship(cascade="all, delete-orphan", order_by="Mark.time_s")
