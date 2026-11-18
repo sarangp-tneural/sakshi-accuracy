@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, streamUrl, type Mark, type MarkingType, type Video } from "../api";
+import { api, streamUrl, type Mark, type MarkingType, type Roi, type Video } from "../api";
 import { useSettings } from "../SettingsContext";
 import { SPEEDS } from "../keys/registry";
 import { countMarks, markingIdOf, markLabel, typesById, withMarkingKeys } from "../lib/markings";
@@ -10,6 +10,7 @@ import { markTime } from "../lib/reaction";
 import type { VirtualLine } from "../lib/lines";
 import { fmtTime } from "../lib/format";
 import { nearestIndex } from "../lib/nearest";
+import { nextKept, prevKept, stillSpans, type Keyframes } from "../lib/stills";
 import { shouldRefocus, useShortcutsPaused } from "../lib/useShortcutState";
 import { useTick } from "../lib/useTick";
 import { Button, Crumbs, LoadError, Spinner } from "../components/ui/bits";
@@ -70,6 +71,10 @@ export default function Count() {
   // virtual lines: shown on the video always, editable here (this video only; the camera and other videos are not touched)
   const [lines, setLines] = useState<VirtualLine[]>([]);
   const [editLines, setEditLines] = useState(false);
+  // door area: changes elsewhere in the picture are ignored when looking for still moments
+  const [roi, setRoi] = useState<Roi | null>(null);
+  const [editRoi, setEditRoi] = useState(false);
+  const [stillsKey, setStillsKey] = useState(0); // bump to fetch the index again (it is redone after the door area changes)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [linesSaving, setLinesSaving] = useState<"idle" | "saving" | "error">("idle");
   const pendingLines = useRef<VirtualLine[] | null>(null);
@@ -122,7 +127,7 @@ export default function Count() {
     setLoad("loading");
     Promise.all([api.video(id), api.marks(id)])
       .then(async ([v, m]) => { setTypes(await api.markingTypes(v.project_id)); return [v, m] as const; })
-      .then(([v, m]) => { setVideo(v); setLines(v.lines ?? []); setMarks(m); setDuration(v.duration_s ?? 0); setLoad("ok"); api.projects().then((ps) => setProjectName(ps.find((p) => p.id === v.project_id)?.name ?? "")).catch(() => {}); })
+      .then(([v, m]) => { setVideo(v); setLines(v.lines ?? []); setRoi(v.roi ?? null); setMarks(m); setDuration(v.duration_s ?? 0); setLoad("ok"); api.projects().then((ps) => setProjectName(ps.find((p) => p.id === v.project_id)?.name ?? "")).catch(() => {}); })
       .catch((e) => { setLoadErr(e.message); setLoad("error"); });
   }, [id]);
   useEffect(fetchAll, [fetchAll]);
@@ -201,7 +206,41 @@ export default function Count() {
   const togglePlay = useCallback(() => { const v = vref.current; if (!v) return; if (v.paused) void v.play(); else v.pause(); }, []);
   // frame step lives in the viewport: it knows the measured frame gap (variable frame rate) and snaps to frame centres
   // Left/Right (and the step buttons) move as many frames as the playback speed: 1x = 1 frame, 4x = 4 frames
-  const step = useCallback((dir: 1 | -1) => viewport.current?.step(dir, Math.max(1, Math.round(vref.current?.playbackRate ?? 1))), []);
+  // "Skip Still Moments": Left/Right jump between the moments the server found worth looking at, instead of single frames
+  const [skipStills, setSkipStills] = useState(() => { try { return localStorage.getItem("sv_skipstills") === "1"; } catch { return false; } });
+  const [stills, setStills] = useState<Keyframes | null>(null);
+  const stillsRef = useRef({ skip: skipStills, kept: stills?.kept });
+  stillsRef.current = { skip: skipStills, kept: stills?.kept };
+  const changeRoi = useCallback((next: Roi | null) => {
+    const prev = roi;
+    setRoi(next); setStills(null);
+    api.putVideoRoi(id, next).then(() => setStillsKey((k) => k + 1)).catch((e) => { setRoi(prev); setStillsKey((k) => k + 1); toast.error(e); });
+  }, [id, roi, toast]);
+  useEffect(() => { // fetch the index; while the server is still working on it (null) ask again every few seconds
+    if (!video || noVideo || (video.status !== "ready" && video.status !== "partial")) return;
+    let alive = true, timer: number | undefined;
+    const poll = () => api.keyframes(id).then((k) => { if (!alive) return; if (k) setStills(k); else timer = window.setTimeout(poll, 5000); }, () => { /* the feature just stays off */ });
+    poll();
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [id, video?.status, noVideo, stillsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // while playing, jump over the skipped stretches too (not only on Left/Right)
+  const skipSpans = useMemo(() => (stills ? stillSpans(stills.kept, stills.duration_s, stills.sample_fps) : []), [stills]);
+  useTick(() => {
+    const v = vref.current;
+    if (!skipStills || !v || v.paused || v.seeking || !skipSpans.length) return;
+    const t = v.currentTime;
+    const span = skipSpans.find(([from, to]) => t >= from && t < to);
+    if (span) v.currentTime = span[1];
+  }, 50);
+  const step = useCallback((dir: 1 | -1) => {
+    const v = vref.current, { skip, kept } = stillsRef.current;
+    if (skip && kept?.length && v) {
+      const target = dir === 1 ? nextKept(kept, v.currentTime) : prevKept(kept, v.currentTime);
+      if (target !== null) v.currentTime = target;
+      return;
+    }
+    viewport.current?.step(dir, Math.max(1, Math.round(v?.playbackRate ?? 1)));
+  }, []);
 
   // single global key handler; reads current bindings from the ref so rebinding applies immediately
   useEffect(() => {
@@ -339,8 +378,16 @@ export default function Count() {
                 {!noVideo && <Button size="sm" variant="ghost" aria-pressed={showPoints} title="Show points on the video"
                   onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>
                   <span aria-hidden>📍</span><span className="tl-label"> Points</span></Button>}
+                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={skipStills && !!stills}
+                  title={stills ? "Left/Right jump between moments where something changes (the original video is not changed)" : "Still moments are still being found"}
+                  disabled={!stills}
+                  onClick={() => { setSkipStills((s) => { try { localStorage.setItem("sv_skipstills", s ? "0" : "1"); } catch { /* ignore */ } return !s; }); setTimeout(focusStage, 0); }}>
+                  <span aria-hidden>⏭</span><span className="tl-label"> Skip still moments</span></Button>}
+                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editRoi} title="Mark the door area, so changes elsewhere are ignored when skipping still moments"
+                  onClick={() => { setEditRoi((e) => !e); setEditLines(false); setTimeout(focusStage, 0); }}>
+                  <span aria-hidden>🚪</span><span className="tl-label"> Door area{roi ? " ✓" : ""}</span></Button>}
                 {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editLines} title="Draw or edit the virtual lines on this video"
-                  onClick={() => { setEditLines((e) => !e); setSelectedLineId(null); setTimeout(focusStage, 0); }}>
+                  onClick={() => { setEditLines((e) => !e); setEditRoi(false); setSelectedLineId(null); setTimeout(focusStage, 0); }}>
                   <span aria-hidden>📏</span><span className="tl-label"> Lines{lines.length ? ` (${lines.length})` : ""}</span></Button>}
                 <Button size="sm" variant="ghost" aria-pressed={settings.sound_enabled} onClick={() => update({ sound_enabled: !settings.sound_enabled }).catch(toast.error)}
                   title="Beep on each mark (not the video audio)"><span aria-hidden>{settings.sound_enabled ? "🔔" : "🔕"}</span><span className="tl-label"> Click sound</span></Button>
@@ -357,6 +404,7 @@ export default function Count() {
           ) : (<>
           <VideoViewport ref={viewport} videoRef={vref} stageRef={stage} src={streamUrl(id)} fps={video.fps}
             points={pointMarks} selectedId={selectedId} showPoints={showPoints} muted={muted} pickMode={pickFor !== null}
+            roi={roi} editRoi={editRoi && pickFor === null} onRoiChange={changeRoi}
             lines={lines} editLines={editLines && pickFor === null} selectedLineId={selectedLineId} onSelectLine={setSelectedLineId} onLinesChange={changeLines}
             onPick={placePoint} onToggle={togglePlay}
             onLoadedMetadata={(v) => { if (v.duration) setDuration(v.duration); }}
@@ -365,12 +413,20 @@ export default function Count() {
           </VideoViewport>
           <ControllerBar videoRef={vref} duration={duration} playing={playing} rate={rate} muted={muted} onToggleMute={toggleMute} marks={timelineMarks}
             selectedId={selectedId} onSelect={setSelectedId}
+            stills={stills} skipStills={skipStills && !!stills}
             onTogglePlay={togglePlay} onStep={step} onJumpBack={jumpBack} onSetSpeed={setSpeed} />
           </>)}
         </div>
 
         <aside className="side">
           <Counters ref={counters} counts={counts} />
+          {editRoi && !noVideo && (
+            <section className="card">
+              <h3>Door area</h3>
+              <p className="small muted">Drag on the picture to draw it, drag inside to move it, drag a corner to resize. Only changes inside it count when skipping still moments.</p>
+              <Button size="sm" disabled={!roi} onClick={() => changeRoi(null)}>Use the whole picture</Button>
+            </section>
+          )}
           {editLines && !noVideo && (
             <section className="card">
               <h3>Lines <span className="small muted">{linesSaving === "saving" ? "saving…" : linesSaving === "error" ? "not saved" : "saved"}</span></h3>

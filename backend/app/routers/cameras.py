@@ -12,7 +12,7 @@ from ..db import get_db
 from ..deps import current_user, get_camera, get_project
 from ..models import Camera, User, Video
 from ..recording import start_recording
-from ..schemas import CameraIn, CameraOut, CameraPatch, LinesIn, RecordCameraIn, VideoOut
+from ..schemas import CameraIn, CameraOut, CameraPatch, LinesIn, RecordCameraIn, RoiIn, VideoOut
 
 router = APIRouter(tags=["cameras"])
 
@@ -47,7 +47,7 @@ def _saved_link(c: Camera) -> str:
 
 def _out(db: Session, cams: list[Camera]) -> list[CameraOut]:
     outs = [CameraOut(id=c.id, project_id=c.project_id, name=c.name, rtsp_url_masked=c.rtsp_url_masked,
-                      default_minutes=c.default_minutes, created_at=c.created_at, lines=c.lines or []) for c in cams]
+                      default_minutes=c.default_minutes, created_at=c.created_at, lines=c.lines or [], roi=c.roi) for c in cams]
     if not outs:
         return outs
     by_id = {o.id: o for o in outs}
@@ -123,6 +123,15 @@ def put_camera_lines(camera_id: int, body: LinesIn, db: Session = Depends(get_db
     return _out(db, [c])[0]
 
 
+@router.put("/cameras/{camera_id}/roi", response_model=CameraOut)
+def put_camera_roi(camera_id: int, body: RoiIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Set (or clear) the door area. Only recordings started afterwards get it; existing videos keep their own."""
+    c = get_camera(db, user, camera_id)
+    c.roi = body.roi.model_dump() if body.roi else None
+    db.commit()
+    return _out(db, [c])[0]
+
+
 @router.delete("/cameras/{camera_id}", status_code=204)
 def delete_camera(camera_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Recordings already made are kept (they just lose the link to the camera)."""
@@ -145,7 +154,7 @@ def record_camera(camera_id: int, body: RecordCameraIn | None = None, db: Sessio
         stamp = func.to_char(func.now(), "YYYY-MM-DD HH24:MI")  # name like "Entrance 2026-11-10 18:17"
         label = db.scalar(select(stamp))
         return start_recording(db, project_id=c.project_id, url=link, minutes=minutes, name=f"{c.name} {label}", camera_id=c.id,
-                               lines=copy.deepcopy(c.lines or []))
+                               lines=copy.deepcopy(c.lines or []), roi=copy.deepcopy(c.roi))
     except HTTPException:
         db.rollback()
         raise

@@ -43,6 +43,7 @@
 .controlbox { display: flex; flex-direction: column; gap: var(--s-2); flex: none; }
 .controls { display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; }
 .controls .playbtn { min-width: 52px; justify-content: center; }
+.saved { font-size: var(--fs-sm); color: var(--text-muted, inherit); white-space: nowrap; }
 .time { min-width: 128px; font-size: var(--fs-md); white-space: nowrap; }
 .speeds { display: flex; gap: 0; }
 .speeds .btn { border-radius: 0; margin-left: -1px; padding: 7px 11px; }

@@ -13,6 +13,7 @@ interface Props {
   marks: TimelineMark[]; // ascending by time
   selectedId: number | null;
   onSelect: (id: number) => void;
+  skipped?: [number, number][]; // spans that "Skip still moments" jumps over: drawn as a faint band
 }
 
 const RULER = 20; // px reserved at the top for the time ruler
@@ -30,7 +31,7 @@ const FOLLOW_PAUSE_MS = 4000;
 
 /** Whole-video timeline on a canvas: drag scrubs, click a marker selects it, Ctrl+wheel zooms, Shift+wheel pans.
  *  Adapted from sakshi-accuracy-automation's AnnotationTimeline; redrawn from refs, never per-frame React state. */
-function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
+function Timeline({ videoRef, duration, marks, selectedId, onSelect, skipped }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
@@ -46,13 +47,13 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
   const raf = useRef(0);
   const colors = useRef({ in: "#6ea8fe", out: "#fb923c", male: "#b79df0", female: "#34d3a4", text: "#9aa4b0", border: "#2f3740", surface: "#1a1f25", fg: "#e8eaed" });
   const hasOther = useMemo(() => marks.some((m) => m.direction === null), [marks]);
-  const live = useRef({ marks, selectedId, duration, onSelect, hasOther });
-  live.current = { marks, selectedId, duration, onSelect, hasOther };
+  const live = useRef({ marks, selectedId, duration, onSelect, hasOther, skipped });
+  live.current = { marks, selectedId, duration, onSelect, hasOther, skipped };
   const times = useRef<number[]>([]);
   times.current = marks.map((m) => m.time_s);
 
   useEffect(() => { view.current = fullView(duration); dirty.current = true; }, [duration]);
-  useEffect(() => { dirty.current = true; }, [marks, selectedId]);
+  useEffect(() => { dirty.current = true; }, [marks, selectedId, skipped]);
 
 
   // size + colors
@@ -86,6 +87,16 @@ function Timeline({ videoRef, duration, marks, selectedId, onSelect }: Props) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
     g.fillStyle = col.surface; g.fillRect(0, 0, W, H);
+    // skipped still moments
+    if (live.current.skipped?.length) {
+      g.fillStyle = col.text; g.globalAlpha = 0.08;
+      for (const [a, b] of live.current.skipped) {
+        if (b < v.start || a > v.end) continue;
+        const x0 = timeToX(Math.max(a, v.start), v, W), x1 = timeToX(Math.min(b, v.end), v, W);
+        if (x1 - x0 >= 0.5) g.fillRect(x0, RULER, x1 - x0, H - RULER);
+      }
+      g.globalAlpha = 1;
+    }
     // ruler
     const span = v.end - v.start;
     const step = rulerStep(span, W);

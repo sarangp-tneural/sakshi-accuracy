@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class LoginIn(BaseModel):
@@ -56,6 +56,24 @@ class LinesIn(BaseModel):
     lines: list[VirtualLine] = Field(max_length=MAX_LINES)
 
 
+class Roi(BaseModel):
+    """The door area, in normalised 0..1 frame coordinates."""
+    x: Unit
+    y: Unit
+    w: Annotated[float, Field(gt=0.02, le=1)]
+    h: Annotated[float, Field(gt=0.02, le=1)]
+
+    @model_validator(mode="after")
+    def _inside(self):
+        if self.x + self.w > 1.0001 or self.y + self.h > 1.0001:
+            raise ValueError("The door area must stay inside the picture")
+        return self
+
+
+class RoiIn(BaseModel):
+    roi: Roi | None = None  # null = the whole frame
+
+
 class VideoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -86,6 +104,7 @@ class VideoOut(BaseModel):
     video_removed_at: datetime | None = None  # the video file was deleted to free space; everything else stays
     disk_bytes: int | None = None  # what the video files take on disk now (None once removed or if there are none)
     lines: list[VirtualLine] = []
+    roi: Roi | None = None
 
 
 class VideoFileRemovedOut(BaseModel):
@@ -122,6 +141,7 @@ class CameraOut(BaseModel):
     default_minutes: int
     created_at: datetime
     lines: list[VirtualLine] = []
+    roi: Roi | None = None
     last_recorded_at: datetime | None = None
     recording_video_id: int | None = None  # the recording (or attempt) in progress, if any
     recording_status: str | None = None  # "connecting" (attempting) or "recording"

@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import and_, exists, func, not_, or_, select
 from sqlalchemy.orm import Session
 
-from .. import control, liveness, rtsp, storage, worker
+from .. import control, liveness, rtsp, storage, stills, worker
 from ..orphans import settle_orphan
 from ..recording import start_recording
 from ..config import settings
@@ -16,7 +16,7 @@ from ..db import get_db
 from ..deps import current_user, get_project, get_video
 from ..models import Camera, Mark, SakshiResult, User, Video, now
 from ..sql import sakshi_has_value
-from ..schemas import LinesIn, RtspIn, RtspPreviewIn, VideoFileRemovedOut, VideoListOut, VideoOut
+from ..schemas import LinesIn, RoiIn, RtspIn, RtspPreviewIn, VideoFileRemovedOut, VideoListOut, VideoOut
 
 router = APIRouter(tags=["videos"])
 
@@ -219,6 +219,45 @@ def put_video_lines(video_id: int, body: LinesIn, db: Session = Depends(get_db),
     v.lines = [ln.model_dump() for ln in body.lines]
     db.commit()
     return with_summary(db, [v])[0]
+
+
+def _stills_path(v: Video) -> Path:
+    if v.video_removed_at is not None:
+        raise HTTPException(410, "The video file was deleted")
+    if v.status not in ("ready", "partial") or not v.playback_path:
+        raise HTTPException(409, "Video is not ready")
+    return storage.video_path(v.id) / stills.FILE_NAME
+
+
+@router.put("/videos/{video_id}/roi", response_model=VideoOut)
+def put_video_roi(video_id: int, body: RoiIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Set (or clear) the door area used to find still moments, and redo that analysis."""
+    v = get_video(db, user, video_id)
+    v.roi = body.roi.model_dump() if body.roi else None
+    db.commit()
+    if v.status in ("ready", "partial") and v.video_removed_at is None:
+        (storage.video_path(v.id) / stills.FILE_NAME).unlink(missing_ok=True)  # the old result no longer fits
+        worker.enqueue(worker.analyze_stills, v.id)
+    return with_summary(db, [v])[0]
+
+
+@router.get("/videos/{video_id}/keyframes")
+def get_keyframes(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The meaningful moments of the video (see stills.py). 202 while the analysis has not finished."""
+    v = get_video(db, user, video_id)
+    data = stills.load(_stills_path(v))
+    if data is None:
+        return JSONResponse({"detail": "Still moments are being found"}, status_code=202)
+    return data
+
+
+@router.post("/videos/{video_id}/keyframes", status_code=202)
+def redo_keyframes(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Ask for the analysis again (e.g. it never finished). The previous result stays until the new one replaces it."""
+    v = get_video(db, user, video_id)
+    _stills_path(v)
+    worker.enqueue(worker.analyze_stills, v.id)
+    return {"detail": "Queued"}
 
 
 @router.get("/videos/{video_id}/stream")

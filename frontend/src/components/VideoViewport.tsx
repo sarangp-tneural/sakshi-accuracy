@@ -4,9 +4,11 @@ import { medianGap, plausibleFrameGap, stepTarget } from "../lib/frameStep";
 import { visibleSlice } from "../lib/timelineView";
 import { useTick } from "../lib/useTick";
 import { IDENTITY, panBy, zoomAt, type Transform } from "../lib/viewport";
+import type { Roi } from "../api";
 import { overlayRect, type VirtualLine } from "../lib/lines";
 import { Button } from "./ui/bits";
 import LinesOverlay from "./lines/LinesOverlay";
+import RoiOverlay from "./lines/RoiOverlay";
 
 export interface PointMark { id: number; time_s: number; direction: "in" | "out" | null; color: string | null; label: string; x: number; y: number }
 export interface ViewportHandle { step: (dir: 1 | -1, frames?: number) => void }
@@ -22,6 +24,9 @@ interface Props {
   muted: boolean;
   pickMode: boolean;
   lines: VirtualLine[]; // always drawn
+  roi: Roi | null; // the door area (shown only while editRoi)
+  editRoi: boolean;
+  onRoiChange: (roi: Roi) => void;
   editLines: boolean; // when on, dragging on the picture draws / edits lines instead of play + pan
   selectedLineId: string | null;
   onSelectLine: (id: string | null) => void;
@@ -39,7 +44,7 @@ const DRAG_PX = 4;
 
 /** The stage: video (zoom 1x-8x with Ctrl+wheel, drag to pan), crisp overlay for points, click-to-pick, frame stepping. */
 const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
-  { videoRef, stageRef, src, fps, points, selectedId, showPoints, muted, pickMode, lines, editLines, selectedLineId, onSelectLine, onLinesChange, onPick, onToggle, onLoadedMetadata, onPlay, onPause, children }, handle) {
+  { videoRef, stageRef, src, fps, points, selectedId, showPoints, muted, pickMode, roi, editRoi, onRoiChange, lines, editLines, selectedLineId, onSelectLine, onLinesChange, onPick, onToggle, onLoadedMetadata, onPlay, onPause, children }, handle) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [tr, setTr] = useState<Transform>(IDENTITY);
   const trRef = useRef(tr); trRef.current = tr;
@@ -218,7 +223,7 @@ const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
   }, 33);
 
   return (
-    <div className={`stage ${pickMode ? "picking" : editLines ? "linedit" : tr.scale > 1 ? "zoomed" : ""}`} ref={stageRef} tabIndex={-1} aria-label="Video player"
+    <div className={`stage ${pickMode ? "picking" : editLines || editRoi ? "linedit" : tr.scale > 1 ? "zoomed" : ""}`} ref={stageRef} tabIndex={-1} aria-label="Video player"
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; }}>
       <div className="vlayer" style={{ transform: `translate(${tr.tx}px, ${tr.ty}px) scale(${tr.scale})` }}>
         <video ref={videoRef} src={src} preload="auto" playsInline muted={muted}
@@ -229,6 +234,7 @@ const VideoViewport = forwardRef<ViewportHandle, Props>(function VideoViewport(
         <LinesOverlay lines={lines} editing={editLines} selectedId={selectedLineId} onSelect={onSelectLine} onChange={onLinesChange}
           box={overlayRect(containRect(layout.w, layout.h, layout.vw, layout.vh), tr)} />
       )}
+      {layout.vw > 0 && editRoi && <RoiOverlay roi={roi} onChange={onRoiChange} box={overlayRect(containRect(layout.w, layout.h, layout.vw, layout.vh), tr)} />}
       {pickMode && <div className="pickbanner" role="status">📍 Click where this person is · Esc to cancel</div>}
       {tr.scale > 1 && (
         <div className="zoombadge" data-ui>
