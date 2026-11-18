@@ -10,7 +10,7 @@ import { markTime } from "../lib/reaction";
 import type { VirtualLine } from "../lib/lines";
 import { fmtTime } from "../lib/format";
 import { nearestIndex } from "../lib/nearest";
-import { nextKept, prevKept, stillSpans, type Keyframes } from "../lib/stills";
+import { nextKept, prevKept, stillSpans, type Keyframes, type StillsState } from "../lib/stills";
 import { shouldRefocus, useShortcutsPaused } from "../lib/useShortcutState";
 import { useTick } from "../lib/useTick";
 import { Button, Crumbs, LoadError, Spinner } from "../components/ui/bits";
@@ -208,21 +208,31 @@ export default function Count() {
   // Left/Right (and the step buttons) move as many frames as the playback speed: 1x = 1 frame, 4x = 4 frames
   // "Skip Still Moments": Left/Right jump between the moments the server found worth looking at, instead of single frames
   const [skipStills, setSkipStills] = useState(() => { try { return localStorage.getItem("sv_skipstills") === "1"; } catch { return false; } });
-  const [stills, setStills] = useState<Keyframes | null>(null);
+  const [stills, setStills] = useState<Keyframes | null>(null); // the moments, once found
+  const [stillsState, setStillsState] = useState<StillsState>("none");
   const stillsRef = useRef({ skip: skipStills, kept: stills?.kept });
   stillsRef.current = { skip: skipStills, kept: stills?.kept };
+  // Finding still moments is manual: a button starts it, and it can be cancelled while it runs.
   const changeRoi = useCallback((next: Roi | null) => {
-    const prev = roi;
-    setRoi(next); setStills(null);
+    const prev = roi, had = stillsState === "ready" || stillsState === "running"; // the server redoes the analysis only if there was one
+    setRoi(next);
+    if (had) { setStills(null); setStillsState("running"); }
     api.putVideoRoi(id, next).then(() => setStillsKey((k) => k + 1)).catch((e) => { setRoi(prev); setStillsKey((k) => k + 1); toast.error(e); });
-  }, [id, roi, toast]);
-  useEffect(() => { // fetch the index; while the server is still working on it (null) ask again every few seconds
+  }, [id, roi, stillsState, toast]);
+  useEffect(() => { // ask where it is; while it runs, ask again every few seconds
     if (!video || noVideo || (video.status !== "ready" && video.status !== "partial")) return;
     let alive = true, timer: number | undefined;
-    const poll = () => api.keyframes(id).then((k) => { if (!alive) return; if (k) setStills(k); else timer = window.setTimeout(poll, 5000); }, () => { /* the feature just stays off */ });
+    const poll = () => api.keyframes(id).then((k) => {
+      if (!alive) return;
+      setStillsState(k.state);
+      setStills(k.state === "ready" ? (k as Keyframes) : null);
+      if (k.state === "running") timer = window.setTimeout(poll, 5000);
+    }, () => { /* the feature just stays off */ });
     poll();
     return () => { alive = false; window.clearTimeout(timer); };
   }, [id, video?.status, noVideo, stillsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const findStills = () => { setStillsState("running"); api.analyzeStills(id).then(() => setStillsKey((k) => k + 1)).catch((e) => { toast.error(e); setStillsKey((k) => k + 1); }); };
+  const cancelStills = () => { setStillsState("none"); api.cancelStills(id).then(() => setStillsKey((k) => k + 1)).catch(toast.error); };
   // while playing, jump over the skipped stretches too (not only on Left/Right)
   const skipSpans = useMemo(() => (stills ? stillSpans(stills.kept, stills.duration_s, stills.sample_fps) : []), [stills]);
   useTick(() => {
@@ -378,11 +388,16 @@ export default function Count() {
                 {!noVideo && <Button size="sm" variant="ghost" aria-pressed={showPoints} title="Show points on the video"
                   onClick={() => setShowPoints((p) => { try { localStorage.setItem("sv_points", p ? "0" : "1"); } catch { /* ignore */ } return !p; })}>
                   <span aria-hidden>📍</span><span className="tl-label"> Points</span></Button>}
-                {!noVideo && <Button size="sm" variant="ghost" aria-pressed={skipStills && !!stills}
-                  title={stills ? "Left/Right jump between moments where something changes (the original video is not changed)" : "Still moments are still being found"}
-                  disabled={!stills}
+                {!noVideo && stillsState === "ready" && <Button size="sm" variant="ghost" aria-pressed={skipStills}
+                  title="Left/Right and playback jump between moments where something changes (the original video is not changed)"
                   onClick={() => { setSkipStills((s) => { try { localStorage.setItem("sv_skipstills", s ? "0" : "1"); } catch { /* ignore */ } return !s; }); setTimeout(focusStage, 0); }}>
                   <span aria-hidden>⏭</span><span className="tl-label"> Skip still moments</span></Button>}
+                {!noVideo && (stillsState === "none" || stillsState === "failed") && <Button size="sm" variant="ghost"
+                  title={stillsState === "failed" ? "It did not finish. Try again." : "Look through the video once for moments where something changes, so you can skip the rest"}
+                  onClick={findStills}><span aria-hidden>🔎</span><span className="tl-label"> {stillsState === "failed" ? "Retry finding still moments" : "Find still moments"}</span></Button>}
+                {!noVideo && stillsState === "running" && <>
+                  <Button size="sm" variant="ghost" disabled><Spinner label="Finding still moments" /><span className="tl-label"> Finding still moments…</span></Button>
+                  <Button size="sm" variant="ghost" title="Stop looking. The video is not changed." onClick={cancelStills}><span aria-hidden>✕</span><span className="tl-label"> Cancel</span></Button></>}
                 {!noVideo && <Button size="sm" variant="ghost" aria-pressed={editRoi} title="Mark the area to watch, so changes elsewhere are ignored when skipping still moments"
                   onClick={() => { setEditRoi((e) => !e); setEditLines(false); setTimeout(focusStage, 0); }}>
                   <span aria-hidden>🎯</span><span className="tl-label"> Focus area{roi ? " ✓" : ""}</span></Button>}
@@ -423,7 +438,7 @@ export default function Count() {
           {editRoi && !noVideo && (
             <section className="card">
               <h3>Focus area</h3>
-              <p className="small muted">Drag on the picture to draw it, drag inside to move it, drag a corner to resize. Only changes inside it count when skipping still moments.</p>
+              <p className="small muted">Drag on the picture to draw it, drag inside to move it, drag a corner to resize. Only changes inside it count when finding still moments. If you have not found them yet, use Find still moments afterwards.</p>
               <Button size="sm" disabled={!roi} onClick={() => changeRoi(null)}>Use the whole picture</Button>
             </section>
           )}

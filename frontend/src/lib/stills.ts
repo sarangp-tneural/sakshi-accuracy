@@ -1,5 +1,7 @@
 /** Still moments: the server finds the frames worth looking at (see backend/app/stills.py). These helpers only read that list. */
 
+export type StillsState = "none" | "running" | "failed" | "ready"; // none = never looked for
+
 export interface Keyframes {
   kept: number[]; // ascending seconds
   duration_s: number;

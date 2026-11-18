@@ -1,6 +1,6 @@
 import type { Bindings } from "./keys/registry";
 import type { VirtualLine } from "./lib/lines";
-import type { Keyframes } from "./lib/stills";
+import type { Keyframes, StillsState } from "./lib/stills";
 import type { Metric } from "./lib/format";
 
 const TOKEN_KEY = "sv_token";
@@ -140,8 +140,10 @@ export const api = {
   updateCamera: (id: number, c: { name?: string; url?: string; default_minutes?: number }) => req<Camera>(`/cameras/${id}`, { method: "PATCH", body: body(c) }),
   putCameraLines: (id: number, lines: VirtualLine[]) => req<Camera>(`/cameras/${id}/lines`, { method: "PUT", body: body({ lines }) }),
   /** The still-moment index; null while the server is still working on it (202). */
-  keyframes: (id: number) => req<Keyframes | { detail: string }>(`/videos/${id}/keyframes`).then((k) => ("kept" in k ? k : null)),
-  redoKeyframes: (id: number) => req<unknown>(`/videos/${id}/keyframes`, { method: "POST" }),
+  /** Where the "find still moments" job is; the moments themselves come with state "ready". */
+  keyframes: (id: number) => req<{ state: StillsState } & Partial<Keyframes>>(`/videos/${id}/keyframes`),
+  analyzeStills: (id: number) => req<unknown>(`/videos/${id}/keyframes`, { method: "POST" }),
+  cancelStills: (id: number) => req<unknown>(`/videos/${id}/keyframes/cancel`, { method: "POST" }),
   putCameraRoi: (id: number, roi: Roi | null) => req<Camera>(`/cameras/${id}/roi`, { method: "PUT", body: body({ roi }) }),
   putVideoRoi: (id: number, roi: Roi | null) => req<Video>(`/videos/${id}/roi`, { method: "PUT", body: body({ roi }) }),
   putVideoLines: (id: number, lines: VirtualLine[]) => req<Video>(`/videos/${id}/lines`, { method: "PUT", body: body({ lines }) }),

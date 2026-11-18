@@ -5,9 +5,10 @@ from the last kept frame (perceptual hash or pixel difference), and always when 
 Only reads the playable copy; the result is a small JSON file next to it. No video file is ever modified.
 """
 import json
+import shutil
 import subprocess
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import numpy as np
 
@@ -70,7 +71,8 @@ def roi_filter(roi: dict | None) -> str:
 
 def build_cmd(src: Path, roi: dict | None) -> list[str]:
     vf = f"{roi_filter(roi)}fps={SAMPLE_FPS},scale={SIZE}:{SIZE},format=gray"
-    return ["ffmpeg", "-v", "error", "-i", str(src), "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "gray", "-"]
+    low = ["nice", "-n", "10"] if shutil.which("nice") else []  # never slow down recording or making playable copies
+    return [*low, "ffmpeg", "-v", "error", "-threads", "2", "-i", str(src), "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "gray", "-"]
 
 
 def read_samples(src: Path, roi: dict | None):
@@ -98,9 +100,31 @@ def summarize(kept: list[float], duration_s: float, roi: dict | None) -> dict:
             "params": {"phash_t": PHASH_T, "diff_t": DIFF_T, "max_gap_s": MAX_GAP_S}}
 
 
-def analyze(playback: Path, duration_s: float, roi: dict | None, out: Path) -> dict:
-    """Analyse the playable copy and write `out` (atomically). Never touches the video itself."""
-    result = summarize(select_keyframes(read_samples(playback, roi)), duration_s, roi)
+class Cancelled(Exception):
+    pass
+
+
+CHECK_EVERY = 50  # samples between asking "should I go on?" (10 s of video)
+
+
+def analyze(playback: Path, duration_s: float, roi: dict | None, out: Path,
+            should_continue: Callable[[], bool] = lambda: True) -> dict | None:
+    """Analyse the playable copy and write `out` (atomically). Never touches the video itself.
+    Returns None (and writes nothing) if `should_continue` says stop."""
+    gen = read_samples(playback, roi)
+
+    def samples():
+        for n, s in enumerate(gen):
+            if n % CHECK_EVERY == 0 and not should_continue():
+                raise Cancelled
+            yield s
+
+    try:
+        result = summarize(select_keyframes(samples()), duration_s, roi)
+    except Cancelled:
+        return None
+    finally:
+        gen.close()  # stops ffmpeg right away
     tmp = out.with_suffix(".tmp")
     tmp.write_text(json.dumps(result))
     tmp.replace(out)

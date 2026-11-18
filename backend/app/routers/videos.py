@@ -229,35 +229,53 @@ def _stills_path(v: Video) -> Path:
     return storage.video_path(v.id) / stills.FILE_NAME
 
 
+def _start_stills(video_id: int) -> None:
+    control.stills_start(video_id)
+    worker.enqueue(worker.analyze_stills, video_id)
+
+
 @router.put("/videos/{video_id}/roi", response_model=VideoOut)
 def put_video_roi(video_id: int, body: RoiIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Set (or clear) the focus area used to find still moments, and redo that analysis."""
+    """Set (or clear) the focus area. If the still moments were already found (or are being found) they are redone with it;
+    otherwise it is just saved and used the next time they are found."""
     v = get_video(db, user, video_id)
     v.roi = body.roi.model_dump() if body.roi else None
     db.commit()
     if v.status in ("ready", "partial") and v.video_removed_at is None:
-        (storage.video_path(v.id) / stills.FILE_NAME).unlink(missing_ok=True)  # the old result no longer fits
-        worker.enqueue(worker.analyze_stills, v.id)
+        f = storage.video_path(v.id) / stills.FILE_NAME
+        if f.exists() or control.stills_running(v.id):
+            f.unlink(missing_ok=True)  # the old result no longer fits
+            _start_stills(v.id)
     return with_summary(db, [v])[0]
 
 
 @router.get("/videos/{video_id}/keyframes")
 def get_keyframes(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """The meaningful moments of the video (see stills.py). 202 while the analysis has not finished."""
+    """{"state": "none" | "running" | "failed" | "ready"}, plus the moments (see stills.py) when ready."""
     v = get_video(db, user, video_id)
     data = stills.load(_stills_path(v))
-    if data is None:
-        return JSONResponse({"detail": "Still moments are being found"}, status_code=202)
-    return data
+    if control.stills_running(v.id):
+        return {"state": "running"}
+    if data is not None:
+        return {"state": "ready", **data}
+    return {"state": "failed" if control.stills_failed(v.id) else "none"}
 
 
 @router.post("/videos/{video_id}/keyframes", status_code=202)
-def redo_keyframes(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Ask for the analysis again (e.g. it never finished). The previous result stays until the new one replaces it."""
+def find_keyframes(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Start finding the still moments of this video (nothing does this automatically). No-op if it is already running."""
     v = get_video(db, user, video_id)
     _stills_path(v)
-    worker.enqueue(worker.analyze_stills, v.id)
-    return {"detail": "Queued"}
+    if not control.stills_running(v.id):
+        _start_stills(v.id)
+    return {"state": "running"}
+
+
+@router.post("/videos/{video_id}/keyframes/cancel", status_code=204)
+def cancel_keyframes(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Stop a running analysis. The video and any earlier result are untouched."""
+    v = get_video(db, user, video_id)
+    control.stills_clear(v.id)
 
 
 @router.get("/videos/{video_id}/stream")

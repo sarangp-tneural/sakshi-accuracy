@@ -60,7 +60,6 @@ def process_upload(video_id: int) -> None:
         if how == "copied":
             v.status_reason = _join(v.status_reason, COPY_NOTE)
         db.commit()
-        _queue_stills(v)
 
 
 ACTIVE = ("connecting", "recording")  # a video in either state still has (or is waiting for) a recorder
@@ -111,7 +110,6 @@ def record_rtsp(video_id: int) -> None:
                     v.status = "partial" if res["status"] == "partial" else "ready"
                     v.status_reason = _join(res["reason"], COPY_NOTE if how == "copied" else None)
                 db.commit()
-                _queue_stills(v)
         finally:
             control.clear_heartbeat(video_id)
             control.clear_stop(video_id)
@@ -131,30 +129,31 @@ def finalize_recording(video_id: int) -> None:
             if how is not None:
                 v.status, v.status_reason = "partial", _join(reason, COPY_NOTE if how == "copied" else None)
             db.commit()
-            _queue_stills(v)
         finally:
             control.clear_heartbeat(video_id)
 
 
-def _queue_stills(v: Video) -> None:
-    if v.playback_path and v.status in ("ready", "partial"):
-        enqueue(analyze_stills, v.id)
-
-
 @celery.task
 def analyze_stills(video_id: int) -> None:
-    """Find the meaningful moments of a video (for "Skip Still Moments"). Best effort: a failure here never touches the video
-    or its status; the keyframes endpoint just keeps saying "not ready" and the analysis can be asked for again."""
+    """Find the meaningful moments of a video (for "Skip Still Moments"). Only runs when someone asks for it, and stops when
+    they cancel (the running flag disappears). A failure here never touches the video or its status."""
+    if not control.stills_running(video_id):
+        return  # cancelled while waiting in the queue
     with SessionLocal() as db:
         v = db.get(Video, video_id)
         if not v or not v.playback_path or v.video_removed_at is not None or not v.duration_s:
+            control.stills_clear(video_id)
             return
         playback, duration, roi = Path(v.playback_path), v.duration_s, v.roi
     try:
-        if playback.exists():
-            stills.analyze(playback, duration, roi, video_path(video_id) / stills.FILE_NAME)
+        if not playback.exists():
+            raise FileNotFoundError(playback)
+        stills.analyze(playback, duration, roi, video_path(video_id) / stills.FILE_NAME,
+                       should_continue=lambda: control.stills_running(video_id))
+        control.stills_clear(video_id)
     except Exception:  # noqa: BLE001
         log.exception("could not analyse the still moments of video %s", video_id)
+        control.stills_fail(video_id)
 
 
 REAP_DELAY_S = 8  # let the other workers answer before judging

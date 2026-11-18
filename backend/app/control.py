@@ -71,6 +71,54 @@ def heartbeats(video_ids: list[int]) -> set[int]:
     return {i for i, f in zip(ids, flags) if f}
 
 
+# --- "find still moments": a flag while the analysis of a video runs (deleting it is how Cancel works) ---
+STILLS_TTL_S = 3600
+STILLS_FAILED_TTL_S = 600
+
+
+def _stills_key(video_id: int) -> str:
+    return f"sv:stills:{video_id}"
+
+
+def _stills_failed_key(video_id: int) -> str:
+    return f"sv:stills:failed:{video_id}"
+
+
+def stills_start(video_id: int) -> None:
+    _r().set(_stills_key(video_id), "1", ex=STILLS_TTL_S)
+    _r().delete(_stills_failed_key(video_id))
+
+
+def stills_running(video_id: int) -> bool:
+    try:
+        return bool(_r().exists(_stills_key(video_id)))
+    except redis.RedisError:
+        return True  # cannot tell: do not cancel a running analysis because Redis hiccuped
+
+
+def stills_clear(video_id: int) -> None:
+    """Finished or cancelled: not running any more."""
+    try:
+        _r().delete(_stills_key(video_id))
+    except redis.RedisError:
+        pass
+
+
+def stills_fail(video_id: int) -> None:
+    try:
+        _r().delete(_stills_key(video_id))
+        _r().set(_stills_failed_key(video_id), "1", ex=STILLS_FAILED_TTL_S)
+    except redis.RedisError:
+        pass
+
+
+def stills_failed(video_id: int) -> bool:
+    try:
+        return bool(_r().exists(_stills_failed_key(video_id)))
+    except redis.RedisError:
+        return False
+
+
 _ARGS = re.compile(r"\(?\s*(\d+)\s*,?\s*\)?")
 RECORDING_TASKS = ("app.worker.record_rtsp", "app.worker.finalize_recording")
 
