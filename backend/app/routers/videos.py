@@ -14,7 +14,7 @@ from ..recording import start_recording
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, get_project, get_video
-from ..models import Camera, Mark, SakshiResult, User, Video, now
+from ..models import Camera, Mark, Project, SakshiResult, User, Video, now
 from ..sql import sakshi_has_value
 from ..schemas import LinesIn, RoiIn, RtspIn, RtspPreviewIn, VideoFileRemovedOut, VideoListOut, VideoOut
 
@@ -266,6 +266,8 @@ def find_keyframes(video_id: int, db: Session = Depends(get_db), user: User = De
     """Start finding the still moments of this video (nothing does this automatically). No-op if it is already running."""
     v = get_video(db, user, video_id)
     _stills_path(v)
+    if not db.get(Project, v.project_id).still_moments:
+        raise HTTPException(409, "Still moments are turned off for this project (Project settings)")
     if not control.stills_running(v.id):
         _start_stills(v.id)
     return {"state": "running"}

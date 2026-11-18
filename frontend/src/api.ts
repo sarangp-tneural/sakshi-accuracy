@@ -36,7 +36,7 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
 const body = (b: unknown) => JSON.stringify(b);
 
 export interface Project {
-  id: number; name: string; created_at: string;
+  id: number; name: string; created_at: string; still_moments: boolean;
   video_count: number; recording_count: number; connecting_count: number; processing_count: number; failed_count: number; camera_count: number;
   mark_total: number; mark_in: number; mark_out: number; compared_count: number; total_duration_s: number; last_activity_at: string | null;
 }
@@ -125,6 +125,7 @@ export const api = {
   me: () => req<{ id: number; email: string }>("/auth/me"),
   login: (email: string, password: string) => req<{ token: string }>("/auth/login", { method: "POST", body: body({ email, password }) }),
   projects: () => req<Project[]>("/projects"),
+  updateProject: (id: number, patch: { still_moments?: boolean }) => req<Project>(`/projects/${id}`, { method: "PATCH", body: body(patch) }),
   deleteProject: (id: number) => req<void>(`/projects/${id}`, { method: "DELETE" }),
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: body({ name }) }),
   videos: (pid: number, params: URLSearchParams, signal?: AbortSignal) => req<VideoList>(`/projects/${pid}/videos?${params.toString()}`, { signal }),

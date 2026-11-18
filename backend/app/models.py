@@ -32,6 +32,8 @@ class Project(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    # "Find / Skip still moments" is offered on this project's videos only when this is on
+    still_moments: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

@@ -17,10 +17,15 @@ class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
+class ProjectPatch(BaseModel):
+    still_moments: bool | None = None
+
+
 class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    still_moments: bool = False  # Find / Skip still moments is offered on this project's videos
     created_at: datetime
     # filled in by the list endpoint (zeros for a project that was just created)
     video_count: int = 0

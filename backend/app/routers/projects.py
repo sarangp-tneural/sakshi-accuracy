@@ -12,7 +12,7 @@ from ..dashboard import evaluation_rows
 from ..marking_defaults import seed_defaults
 from ..metrics import rollup, rollup_markings
 from ..models import Camera, Mark, MarkingType, Project, SakshiResult, User, Video
-from ..schemas import ProjectIn, ProjectOut
+from ..schemas import ProjectIn, ProjectOut, ProjectPatch
 from ..sql import sakshi_has_value
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -79,6 +79,16 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = 
     db.add(p)
     db.flush()
     seed_defaults(db, p.id)
+    db.commit()
+    return with_summary(db, [p])[0]
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+def patch_project(project_id: int, body: ProjectPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Change project settings. Turning still moments off only hides the buttons; results already found are kept."""
+    p = get_project(db, user, project_id)
+    if body.still_moments is not None:
+        p.still_moments = body.still_moments
     db.commit()
     return with_summary(db, [p])[0]
 

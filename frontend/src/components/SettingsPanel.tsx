@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "../SettingsContext";
-import type { MarkingType } from "../api";
+import { api, type MarkingType } from "../api";
 import MarkingsEditor from "./MarkingsEditor";
 import { ACTIONS, keyLabel, labelOf, rebind, swap } from "../keys/registry";
 import { capture } from "../keys/capture";
@@ -11,7 +11,7 @@ import { useToast } from "./ui/Toast";
 function setCapture(on: boolean) { capture.active = on; window.dispatchEvent(new Event("sv-capture")); }
 
 /** Used both in the Project > Settings tab and in the Count-screen drawer. */
-export default function SettingsPanel({ projectId, onMarkingsChange }: { projectId?: number; onMarkingsChange?: (t: MarkingType[]) => void }) {
+export default function SettingsPanel({ projectId, onMarkingsChange, onStillMomentsChange }: { projectId?: number; onMarkingsChange?: (t: MarkingType[]) => void; onStillMomentsChange?: (on: boolean) => void }) {
   const { settings, update, reset } = useSettings();
   const toast = useToast();
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -21,6 +21,20 @@ export default function SettingsPanel({ projectId, onMarkingsChange }: { project
   const [delay, setDelay] = useState(settings.reaction_delay_s);
   const delayTimer = useRef<number | undefined>(undefined);
   const b = settings.key_bindings;
+  const [stillMoments, setStillMoments] = useState<boolean | null>(null); // null while loading
+  useEffect(() => {
+    if (projectId === undefined) return;
+    let alive = true;
+    api.projects().then((ps) => { if (alive) setStillMoments(ps.find((p) => p.id === projectId)?.still_moments ?? false); }, () => {});
+    return () => { alive = false; };
+  }, [projectId]);
+  const chooseStillMoments = (on: boolean) => {
+    if (projectId === undefined || on === stillMoments) return;
+    const prev = stillMoments;
+    setStillMoments(on);
+    api.updateProject(projectId, { still_moments: on }).then(() => { onStillMomentsChange?.(on); toast.success(on ? "Still moments turned on" : "Still moments turned off"); })
+      .catch((e) => { setStillMoments(prev); toast.error(e); });
+  };
 
   useEffect(() => { setDelay(settings.reaction_delay_s); }, [settings.reaction_delay_s]);
   useEffect(() => { setCapture(capturing !== null); return () => setCapture(false); }, [capturing]);
@@ -53,6 +67,16 @@ export default function SettingsPanel({ projectId, onMarkingsChange }: { project
   return (
     <div className="stack">
       {projectId !== undefined && <MarkingsEditor projectId={projectId} onChange={onMarkingsChange} />}
+      {projectId !== undefined && (
+        <section className="stack">
+          <h3 id="still-h">Still moments</h3>
+          <div role="radiogroup" aria-labelledby="still-h" className="stack">
+            <label className="switch"><input type="radio" name="still-moments" disabled={stillMoments === null} checked={stillMoments === false} onChange={() => chooseStillMoments(false)} /> Off</label>
+            <label className="switch"><input type="radio" name="still-moments" disabled={stillMoments === null} checked={stillMoments === true} onChange={() => chooseStillMoments(true)} /> On</label>
+          </div>
+          <span className="hint">On: each video of this project gets a Find still moments button. It looks through the video once, so Left/Right and playback can skip the quiet parts. Off hides it; nothing already found is deleted.</span>
+        </section>
+      )}
       <section className="stack">
         <h3>Counting</h3>
         <div className="field">

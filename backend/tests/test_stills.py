@@ -97,7 +97,31 @@ def test_keyframes_are_private(client, auth, pid):
     assert client.get(f"/api/videos/{vid}/keyframes", headers=other).status_code == 404
 
 
+def turn_on(client, auth, pid):
+    assert client.patch(f"/api/projects/{pid}", json={"still_moments": True}, headers=auth).json()["still_moments"] is True
+
+
+def test_the_project_switch_defaults_off_and_is_private(client, auth, pid):
+    assert client.get("/api/projects", headers=auth).json()[0]["still_moments"] is False
+    other = make_user("b@x.com")[1]
+    assert client.patch(f"/api/projects/{pid}", json={"still_moments": True}, headers=other).status_code == 404
+    turn_on(client, auth, pid)
+    assert client.get("/api/projects", headers=auth).json()[0]["still_moments"] is True
+    assert client.patch(f"/api/projects/{pid}", json={}, headers=auth).json()["still_moments"] is True  # nothing to change
+
+
+def test_finding_is_refused_while_the_project_has_it_off(client, auth, pid, monkeypatch):
+    queued = []
+    monkeypatch.setattr(worker, "enqueue", lambda task, vid: queued.append(vid))
+    vid = add(pid)
+    r = client.post(f"/api/videos/{vid}/keyframes", headers=auth)
+    assert r.status_code == 409 and "turned off" in r.json()["detail"] and queued == []
+    turn_on(client, auth, pid)
+    assert client.post(f"/api/videos/{vid}/keyframes", headers=auth).status_code == 202
+
+
 def test_find_queues_once_and_cancel_stops_it(client, auth, pid, monkeypatch):
+    turn_on(client, auth, pid)
     queued = []
     monkeypatch.setattr(worker, "enqueue", lambda task, vid: queued.append((task, vid)))
     vid = add(pid)

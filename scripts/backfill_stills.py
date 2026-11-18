@@ -13,7 +13,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import stills  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
-from app.models import Video  # noqa: E402
+from app.models import Project, Video  # noqa: E402
 from app.storage import video_path  # noqa: E402
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -30,6 +30,8 @@ with SessionLocal() as db:
         out = video_path(v.id) / stills.FILE_NAME
         if playback is None or not playback.is_file() or not v.duration_s:
             print(f"video {v.id}: no playable copy, skipped")
+        elif not args and not db.get(Project, v.project_id).still_moments:
+            print(f"video {v.id} ({v.name}): still moments are off for its project, skipped")
         elif not args and stills.load(out):
             print(f"video {v.id} ({v.name}): already analysed")
         elif dry:
