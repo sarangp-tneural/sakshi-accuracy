@@ -8,6 +8,8 @@ from pathlib import Path
 # Keep a keyframe at least this often; a 1 s keyframe interval costs only a few percent in file size.
 MAX_KEYFRAME_GAP_S = 1.5
 KEYFRAME_SAMPLE_PACKETS = 600
+# The playable copy is at most 1280 px wide (never enlarged; the original keeps its full size). A big saving in conversion time.
+PLAYBACK_SCALE = "scale=w='min(1280,iw)':h=-2"
 
 
 def max_keyframe_gap(packets: list[tuple[float, bool]]) -> float | None:
@@ -81,8 +83,8 @@ def build_playback_cmd(src: Path, dest: Path, info: dict) -> list[str]:
     if remux_ok:
         return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c", "copy", "-movflags", "+faststart", str(dest)]
     gop = str(max(1, round(info.get("fps") or 25)))
-    return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-pix_fmt", "yuv420p", "-g", gop, "-keyint_min", gop, "-sc_threshold", "0",
+    return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
+            "-vf", PLAYBACK_SCALE, "-pix_fmt", "yuv420p", "-g", gop, "-keyint_min", gop, "-sc_threshold", "0",
             "-c:a", "aac", "-movflags", "+faststart", str(dest)]
 
 

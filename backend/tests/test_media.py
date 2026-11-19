@@ -68,3 +68,9 @@ def test_real_ffprobe_on_a_generated_clip(tmp_path):
     out = tmp_path / "play.mp4"
     media.make_playback(clip, out, media.probe(clip))
     assert media.probe_keyframe_gap(out) <= 1.1
+
+
+def test_playback_copy_is_scaled_down_to_at_most_1280_wide():
+    info = {"vcodec": "hevc", "container": "mov,mp4", "fps": 25.0, "max_keyframe_gap_s": 2.0}
+    cmd = media.build_playback_cmd(SRC, DEST, info)
+    assert cmd[cmd.index("-vf") + 1] == media.PLAYBACK_SCALE and "min(1280,iw)" in media.PLAYBACK_SCALE

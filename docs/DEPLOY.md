@@ -60,15 +60,13 @@ CORS_ORIGINS=["http://216.48.183.100"]
 - `<DB_PASSWORD>`: letters and digits only (`openssl rand -hex 16`); `@ / #` break the URL.
 - With a domain later, use `CORS_ORIGINS=["https://your-domain.com"]`.
 
-### 6. Lock down the database (`docker-compose.yml`)
-On the server, edit `docker-compose.yml`:
-```yaml
-      POSTGRES_PASSWORD: <DB_PASSWORD>          # was: sakshi
-    ports: ["127.0.0.1:5442:5432"]              # postgres, was: ["5442:5432"]
-    ports: ["127.0.0.1:6390:6379"]              # redis, was: ["6390:6379"]
+### 6. Lock down the database (`.env`, not `docker-compose.yml`)
+`docker-compose.yml` already publishes Postgres and Redis on 127.0.0.1 only. The only thing to set on the server is the database password, in the `.env` file you made in step 5 (it is not in git, so `git pull` never touches it):
+```bash
+POSTGRES_PASSWORD=<DB_PASSWORD>      # the same password you put in DATABASE_URL
 ```
+Do **not** edit `docker-compose.yml` on the server: it stays identical to git, so updates never conflict.
 Postgres only applies the password on first start. If the `pgdata` volume already exists, run `docker compose down -v` first (this **deletes the database**).
-Note: local edits to this file will conflict with `git pull`; see "Updating" below.
 
 ### 7. Start Postgres, Redis and the RTSP relay
 ```bash
@@ -125,7 +123,7 @@ After=docker.service network.target
 [Service]
 User=sarang
 WorkingDirectory=/opt/sakshi-verify/backend
-ExecStart=/home/sarang/.local/bin/uv run celery -A app.worker.celery worker -l info -c 4
+ExecStart=/home/sarang/.local/bin/uv run celery -A app.worker.celery worker -l info -c 4 -Q celery
 Restart=always
 KillMode=control-group
 
@@ -139,6 +137,27 @@ sudo systemctl enable --now sakshi-api sakshi-worker
 systemctl is-active sakshi-api sakshi-worker      # both: active
 curl -s http://127.0.0.1:8000/docs | head -c 80   # HTML
 ```
+**Media worker (required): makes the playable copies, one at a time.** Recordings and uploads are converted by a separate worker with a single slot, so conversions never compete for the CPU and the first video is ready as soon as it is done. Without it, videos stay on "processing" forever.
+```bash
+sudo tee /etc/systemd/system/sakshi-media.service > /dev/null <<'EOF'
+[Unit]
+Description=Sakshi Verify media worker (one conversion at a time)
+After=docker.service network.target
+
+[Service]
+User=sarang
+WorkingDirectory=/opt/sakshi-verify/backend
+ExecStart=/home/sarang/.local/bin/uv run celery -A app.worker.celery worker -l info -c 1 -Q media -n media@%h
+Restart=always
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload && sudo systemctl enable --now sakshi-media
+```
+When updating an existing server, also change `sakshi-worker.service` to end with `-c 4 -Q celery`, then `sudo systemctl daemon-reload && sudo systemctl restart sakshi-worker`.
+
 `Restart=always` brings them back after a crash/reboot. `KillMode=control-group` makes stopping the worker also stop its ffmpeg children.
 
 ### 12. nginx
@@ -198,11 +217,19 @@ Certbot cannot issue a normal certificate for a bare IP. Without HTTPS, password
 
 Run on the server. **Stop any running recording first** (use Stop in the app): restarting the worker orphans a recording in progress.
 
+
+ssh sarang@216.48.183.100
+
+docker compose up -d                     # starts/updates containers (the relay); your database is kept
+
+
 ```bash
 cd /opt/sakshi-verify
 git pull
-(cd backend && uv sync && uv run alembic upgrade head)   # new packages + DB migrations
-(cd frontend && npm ci && npm run build)                  # rebuild the website
+cd backend && uv sync && uv run alembic upgrade head   # new packages + DB migrations
+cd ..
+cd frontend && npm ci && npm run build   # rebuild the website
+cd ..              
 sudo systemctl restart sakshi-api sakshi-worker
 ```
 

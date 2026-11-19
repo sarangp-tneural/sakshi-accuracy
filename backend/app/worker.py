@@ -16,6 +16,13 @@ from .storage import video_dir, video_path
 log = logging.getLogger(__name__)
 celery = Celery("sakshi", broker=settings.redis_url, backend=settings.redis_url)
 celery.conf.task_always_eager = settings.celery_eager
+# Making playable copies is heavy. It has its own queue, served by a worker that does ONE at a time (see docs/DEPLOY.md),
+# so recordings never wait behind conversions and conversions never fight each other for the CPU.
+MEDIA_QUEUE = "media"
+celery.conf.task_routes = {
+    "app.worker.process_upload": {"queue": MEDIA_QUEUE},
+    "app.worker.finalize_recording": {"queue": MEDIA_QUEUE},
+}
 
 
 def _size(path: Path) -> int | None:
@@ -104,20 +111,17 @@ def record_rtsp(video_id: int) -> None:
                 # and Stop no longer applies.
                 v.status, v.status_reason = "processing", res["reason"]
                 db.commit()
-                control.heartbeat(video_id, control.FINISHING_TTL_S)  # still busy: making the playable copy
-                how = _finish_media(db, v, out)
-                if how is not None:
-                    v.status = "partial" if res["status"] == "partial" else "ready"
-                    v.status_reason = _join(res["reason"], COPY_NOTE if how == "copied" else None)
-                db.commit()
+                # The playable copy is made by finalize_recording, on the media queue (one conversion at a time).
+                finalize_recording.delay(video_id, res["status"] == "partial")
         finally:
             control.clear_heartbeat(video_id)
             control.clear_stop(video_id)
 
 
 @celery.task
-def finalize_recording(video_id: int) -> None:
-    """Turn the footage of a recording that lost its recorder into a playable video; it stays marked partial."""
+def finalize_recording(video_id: int, partial: bool = True) -> None:
+    """Turn the footage of a finished recording into a playable video. Marked partial unless the recording was complete
+    (a recording that lost its recorder is always partial)."""
     with SessionLocal() as db:
         v = db.get(Video, video_id)
         if not v or v.status != "processing":
@@ -127,7 +131,8 @@ def finalize_recording(video_id: int) -> None:
             reason = v.status_reason
             how = _finish_media(db, v, Path(v.file_path))
             if how is not None:
-                v.status, v.status_reason = "partial", _join(reason, COPY_NOTE if how == "copied" else None)
+                v.status = "partial" if partial else "ready"
+                v.status_reason = _join(reason, COPY_NOTE if how == "copied" else None)
             db.commit()
         finally:
             control.clear_heartbeat(video_id)

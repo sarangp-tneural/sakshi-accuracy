@@ -104,3 +104,6 @@ docker run --rm -p 8554:8554 bluenviron/mediamtx
 ffmpeg -re -stream_loop -1 -i some.mp4 -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live
 # record rtsp://127.0.0.1:8554/live for 1 minute; stop the ffmpeg publisher after ~20 s to see "partial".
 ```
+
+
+ssh sarang@216.48.183.100
