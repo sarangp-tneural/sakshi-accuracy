@@ -208,6 +208,26 @@ def stop_recording(video_id: int, db: Session = Depends(get_db), user: User = De
     return v
 
 
+@router.post("/videos/{video_id}/convert", response_model=VideoOut)
+def convert_video(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Convert this video to H.264 (at most 1280 px wide), for when its own format (e.g. HEVC) does not play in a browser.
+    It waits for its turn on the media worker; if the conversion fails the video stays as it was."""
+    v = get_video(db, user, video_id)
+    if v.video_removed_at is not None or not v.file_path:
+        raise HTTPException(410, "The video file was deleted")
+    if v.status not in ("ready", "partial"):
+        raise HTTPException(409, "Wait until the video is saved")
+    if v.playback_vcodec == "h264":
+        raise HTTPException(409, "This video is already H.264")
+    previous = v.status
+    v.status = "processing"
+    worker.mark_queued(v)
+    db.commit()
+    worker.convert_to_h264.delay(v.id, previous)
+    db.refresh(v)
+    return with_summary(db, [v])[0]
+
+
 @router.get("/videos/{video_id}", response_model=VideoOut)
 def get_video_ep(video_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     return with_summary(db, [get_video(db, user, video_id)])[0]

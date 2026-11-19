@@ -29,6 +29,7 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
   const [dialog, setDialog] = useState<"upload" | "record" | null>(null);
   const [del, setDel] = useState<Video | null>(null);
   const [rmFile, setRmFile] = useState<Video | null>(null);
+  const [conv, setConv] = useState<Video | null>(null);
   const [exp, setExp] = useState<Video | null>(null);
   const [stopping, setStopping] = useState<{ id: number; name: string; attempting: boolean } | null>(null);
   const { cameras, reload: reloadCameras } = useCameras(projectId);
@@ -115,7 +116,7 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
             </div>
           ) : (
             <VideoTable items={data.items} uploads={uploads.items} now={now} dim={loading}
-              onCancelUpload={uploads.cancel} onOpen={(v) => nav(`/videos/${v.id}`)} onStop={(v) => setStopping({ id: v.id, name: v.name, attempting: v.status === "connecting" })} onExport={setExp} onDelete={setDel} onRemoveFile={setRmFile} />
+              onCancelUpload={uploads.cancel} onOpen={(v) => nav(`/videos/${v.id}`)} onStop={(v) => setStopping({ id: v.id, name: v.name, attempting: v.status === "connecting" })} onExport={setExp} onDelete={setDel} onRemoveFile={setRmFile} onConvert={setConv} />
           )}
 
           {(total > data.page_size || filters.page > 1) && (
@@ -154,6 +155,12 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
         <ConfirmDialog title="Delete video file?" danger confirmLabel="Delete video file" message={removeFileWarning(rmFile, fmtBytes)}
           onCancel={() => setRmFile(null)}
           onConfirm={() => { const v = rmFile; setRmFile(null); api.removeVideoFile(v.id).then((r) => { toast.success(`Video file deleted. Freed ${fmtBytes(r.freed_bytes)}. Counts and details are kept.`); reload(); }).catch(toast.error); }} />
+      )}
+      {conv && (
+        <ConfirmDialog title="Convert to H.264?" confirmLabel="Convert"
+          message={`“${conv.name}” will be converted to H.264 (up to 1280 px wide) so it plays in any browser. It waits for its turn, and until it is done the video cannot be opened. The original file is kept, and if the conversion fails the video stays as it is.`}
+          onCancel={() => setConv(null)}
+          onConfirm={() => { const v = conv; setConv(null); api.convertVideo(v.id).then(() => { toast.info("Converting to H.264…"); reload(); }).catch(toast.error); }} />
       )}
       {stopping && (() => { const d = stopDialog(stopping.attempting); return (
         <ConfirmDialog title={d.title} confirmLabel={d.confirm} message={d.message}

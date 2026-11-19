@@ -22,12 +22,25 @@ export default function SettingsPanel({ projectId, onMarkingsChange, onStillMome
   const delayTimer = useRef<number | undefined>(undefined);
   const b = settings.key_bindings;
   const [stillMoments, setStillMoments] = useState<boolean | null>(null); // null while loading
+  const [keepFormat, setKeepFormat] = useState<boolean | null>(null); // null while loading
   useEffect(() => {
     if (projectId === undefined) return;
     let alive = true;
-    api.projects().then((ps) => { if (alive) setStillMoments(ps.find((p) => p.id === projectId)?.still_moments ?? false); }, () => {});
+    api.projects().then((ps) => {
+      if (!alive) return;
+      const p = ps.find((x) => x.id === projectId);
+      setStillMoments(p?.still_moments ?? false);
+      setKeepFormat(p?.keep_format ?? true);
+    }, () => {});
     return () => { alive = false; };
   }, [projectId]);
+  const chooseKeepFormat = (on: boolean) => {
+    if (projectId === undefined || on === keepFormat) return;
+    const prev = keepFormat;
+    setKeepFormat(on);
+    api.updateProject(projectId, { keep_format: on }).then(() => toast.success(on ? "Videos keep the stream's own format" : "Videos are converted to H.264"))
+      .catch((e) => { setKeepFormat(prev); toast.error(e); });
+  };
   const chooseStillMoments = (on: boolean) => {
     if (projectId === undefined || on === stillMoments) return;
     const prev = stillMoments;
@@ -67,6 +80,16 @@ export default function SettingsPanel({ projectId, onMarkingsChange, onStillMome
   return (
     <div className="stack">
       {projectId !== undefined && <MarkingsEditor projectId={projectId} onChange={onMarkingsChange} />}
+      {projectId !== undefined && (
+        <section className="stack">
+          <h3 id="format-h">Video format</h3>
+          <div role="radiogroup" aria-labelledby="format-h" className="stack">
+            <label className="switch"><input type="radio" name="keep-format" disabled={keepFormat === null} checked={keepFormat === true} onChange={() => chooseKeepFormat(true)} /> Keep the stream's own format (no conversion)</label>
+            <label className="switch"><input type="radio" name="keep-format" disabled={keepFormat === null} checked={keepFormat === false} onChange={() => chooseKeepFormat(false)} /> Convert to H.264 (up to 1280 px wide)</label>
+          </div>
+          <span className="hint">Keep: each video is copied exactly as the stream gave it, with no loss of quality, and is ready in seconds. HEVC (H.265) streams play only in some browsers (Safari, and Chrome with hardware decoding). Convert: slower, but plays everywhere. Applies to videos recorded or uploaded from now on.</span>
+        </section>
+      )}
       {projectId !== undefined && (
         <section className="stack">
           <h3 id="still-h">Still moments</h3>

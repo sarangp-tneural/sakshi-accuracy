@@ -34,6 +34,8 @@ class Project(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     # "Find / Skip still moments" is offered on this project's videos only when this is on
     still_moments: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # on: the playable copy keeps the stream's own format (copied, never converted); off: converted to H.264, at most 1280 px wide
+    keep_format: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -95,6 +97,11 @@ class Video(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes of the original
     playback_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes of the playable copy
+    # the playable copy's own format (the columns without a prefix are the original's)
+    playback_vcodec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    playback_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    playback_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    playback_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
     # what happened after the request, in order: the recorder took the job, the playable copy was queued, its conversion
     # started, it finished (or failed)
     picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -17,6 +17,10 @@ export const isExportable = isOpenable;
 /** Still being recorded, or still trying to reach the camera. */
 export const isActive = (v: Pick<Video, "status">) => v.status === "connecting" || v.status === "recording";
 
+/** Offer "Convert to H.264": the playable copy is in another format (e.g. HEVC), which some browsers cannot play. */
+export const canConvert = (v: Pick<Video, "status" | "playback_vcodec" | "video_removed_at">) =>
+  (v.status === "ready" || v.status === "partial") && !v.video_removed_at && !!v.playback_vcodec && v.playback_vcodec !== "h264";
+
 /** What "processing" really is right now: waiting for its turn, or compressing. Older videos have no times, so just "processing". */
 export type ProcessingPhase = "waiting" | "compressing" | "processing";
 export function processingPhase(v: Pick<Video, "status" | "queued_at" | "converting_at" | "converted_at">): ProcessingPhase | null {

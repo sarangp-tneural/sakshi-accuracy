@@ -112,3 +112,20 @@ describe("secondsBetween", () => {
     expect(secondsBetween(null, null, 0)).toBeNull();
   });
 });
+
+import { canConvert } from "./videoRow";
+
+describe("canConvert", () => {
+  const c = (o: Record<string, unknown>) => canConvert({ status: "ready", playback_vcodec: "hevc", video_removed_at: null, ...o } as never);
+  it("is offered for a saved video whose copy is not H.264", () => {
+    expect(c({})).toBe(true);
+    expect(c({ status: "partial" })).toBe(true);
+  });
+  it("is not offered when it is H.264 already, unknown (older video), busy, or the file is gone", () => {
+    expect(c({ playback_vcodec: "h264" })).toBe(false);
+    expect(c({ playback_vcodec: null })).toBe(false);
+    expect(c({ status: "processing" })).toBe(false);
+    expect(c({ status: "failed" })).toBe(false);
+    expect(c({ video_removed_at: "2026-11-19T10:00:00Z" })).toBe(false);
+  });
+});

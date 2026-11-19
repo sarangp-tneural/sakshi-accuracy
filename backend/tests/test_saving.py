@@ -1,10 +1,13 @@
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from app import media, rtsp, worker
+from app.db import SessionLocal
 from app.models import Video
+from tests.conftest import make_user
 from tests.test_orphans import fake_media, fake, pid, recording, video  # noqa: F401  (fixtures and helpers)
 
 SRC, DEST = Path("a.avi"), Path("out.mp4")
@@ -168,3 +171,93 @@ def test_an_upload_is_timed_and_its_copy_size_stored(client, auth, pid, monkeypa
     v = video(r.json()["id"])
     assert v.status == "ready" and v.playback_size == 3 and v.file_size == 100
     assert v.queued_at <= v.converting_at <= v.converted_at
+
+
+def test_keep_format_defaults_on_toggles_and_is_private(client, auth, pid):
+    assert client.get("/api/projects", headers=auth).json()[0]["keep_format"] is True
+    other = make_user("b@x.com")[1]
+    assert client.patch(f"/api/projects/{pid}", json={"keep_format": False}, headers=other).status_code == 404
+    assert client.patch(f"/api/projects/{pid}", json={"keep_format": False}, headers=auth).json()["keep_format"] is False
+    assert client.patch(f"/api/projects/{pid}", json={}, headers=auth).json()["keep_format"] is False  # nothing to change
+
+
+def test_the_conversion_follows_the_projects_keep_format_setting(client, auth, pid, monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setattr(media, "probe", lambda p: {"duration_s": 10.0, "fps": 25.0, "vcodec": "hevc", "width": 1920, "height": 1080,
+                                                   "container": "mp4", "max_keyframe_gap_s": 2.0})
+    monkeypatch.setattr(media, "make_playback", lambda src, dest, info: (seen.append(info["keep_format"]), Path(dest).write_bytes(b"p"), "ready")[2])
+    for on in (True, False):
+        client.patch(f"/api/projects/{pid}", json={"keep_format": on}, headers=auth)
+        worker.process_upload(recording(pid, status="processing", file_bytes=100, tmp=tmp_path, name=f"v{on}"))
+    assert seen == [True, False]
+
+
+# ---------------------------------------------------------------- converting by hand
+def ready_hevc(pid, tmp_path, name="h", status="ready"):
+    vid = recording(pid, status=status, file_bytes=100, tmp=tmp_path, name=name)
+    folder = tmp_path / f"play{vid}"
+    folder.mkdir()
+    (folder / "playback.mp4").write_bytes(b"old copy")
+    with SessionLocal() as db:
+        v = db.get(Video, vid)
+        v.playback_path, v.playback_vcodec, v.vcodec, v.status_reason = str(folder / "playback.mp4"), "hevc", "hevc", "Stopped manually"
+        db.commit()
+    return vid, folder
+
+
+def test_convert_by_hand_queues_the_conversion_and_marks_the_video_processing(client, auth, pid, monkeypatch, tmp_path):
+    vid, _ = ready_hevc(pid, tmp_path)
+    queued = []
+    monkeypatch.setattr(worker.convert_to_h264, "delay", lambda *a: queued.append(a))
+    r = client.post(f"/api/videos/{vid}/convert", headers=auth)
+    assert r.status_code == 200 and r.json()["status"] == "processing" and r.json()["queued_at"] and queued == [(vid, "ready")]
+    assert client.post(f"/api/videos/{vid}/convert", headers=auth).status_code == 409  # already waiting
+    assert client.post(f"/api/videos/{vid}/convert", headers=make_user("b@x.com")[1]).status_code == 404
+
+
+def test_convert_by_hand_is_refused_when_pointless_or_impossible(client, auth, pid, monkeypatch, tmp_path):
+    monkeypatch.setattr(worker.convert_to_h264, "delay", lambda *a: None)
+    vid, _ = ready_hevc(pid, tmp_path)
+    with SessionLocal() as db:
+        db.get(Video, vid).playback_vcodec = "h264"
+        db.commit()
+    assert client.post(f"/api/videos/{vid}/convert", headers=auth).status_code == 409  # already H.264
+    rec = recording(pid, status="recording", tmp=tmp_path, name="r")
+    assert client.post(f"/api/videos/{rec}/convert", headers=auth).status_code == 409
+    gone, _ = ready_hevc(pid, tmp_path, name="g")
+    with SessionLocal() as db:
+        db.get(Video, gone).video_removed_at = datetime.now(timezone.utc)
+        db.commit()
+    assert client.post(f"/api/videos/{gone}/convert", headers=auth).status_code == 410
+
+
+def test_the_manual_conversion_replaces_the_copy_and_restores_the_status(pid, fake, monkeypatch, tmp_path):
+    vid, folder = ready_hevc(pid, tmp_path, status="partial")
+    monkeypatch.setattr(worker, "video_dir", lambda i: folder)
+    monkeypatch.setattr(media, "probe", lambda p: {"duration_s": 10.0, "fps": 25.0, "vcodec": "hevc", "width": 1920, "height": 1080,
+                                                   "container": "mp4", "max_keyframe_gap_s": 2.0})
+    seen = []
+    monkeypatch.setattr(media, "make_playback", lambda src, dest, info: (seen.append(info["keep_format"]), Path(dest).write_bytes(b"h264!"), "ready")[2])
+    monkeypatch.setattr(media, "probe_stream", lambda p: {"vcodec": "h264", "width": 1280, "height": 720, "fps": 25.0})
+    with SessionLocal() as db:
+        db.get(Video, vid).status = "processing"
+        db.commit()
+    worker.convert_to_h264(vid, "partial")
+    v = video(vid)
+    assert seen == [False] and v.status == "partial" and (folder / "playback.mp4").read_bytes() == b"h264!" and not (folder / "playback.h264.mp4").exists()
+    assert (v.playback_vcodec, v.playback_width, v.playback_size) == ("h264", 1280, 5) and v.converted_at and not fake.data
+
+
+def test_a_failed_manual_conversion_keeps_the_old_copy(pid, fake, monkeypatch, tmp_path):
+    vid, folder = ready_hevc(pid, tmp_path)
+    monkeypatch.setattr(worker, "video_dir", lambda i: folder)
+    monkeypatch.setattr(media, "probe", lambda p: (_ for _ in ()).throw(ValueError("No video stream found")))
+    with SessionLocal() as db:
+        db.get(Video, vid).status = "processing"
+        db.commit()
+    worker.convert_to_h264(vid, "ready")
+    v = video(vid)
+    assert v.status == "ready" and (folder / "playback.mp4").read_bytes() == b"old copy" and v.playback_vcodec == "hevc"
+    assert v.status_reason.startswith("Stopped manually") and "Could not convert to H.264: No video stream found" in v.status_reason and not fake.data
+    worker.convert_to_h264(vid, "ready")  # not waiting any more: does nothing
+    assert video(vid).status == "ready"

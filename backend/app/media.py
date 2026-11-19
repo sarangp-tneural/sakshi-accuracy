@@ -45,6 +45,25 @@ def probe_keyframe_gap(path: Path) -> float | None:
     return max_keyframe_gap(packets) if packets else None
 
 
+def _fps(stream: dict) -> float | None:
+    try:
+        n, d = stream.get("avg_frame_rate", "0/1").split("/")
+        return (float(n) / float(d) if float(d) else 0.0) or None
+    except ValueError:
+        return None
+
+
+def probe_stream(path: Path) -> dict | None:
+    """{vcodec, width, height, fps} of a finished file, or None if it cannot be read (a missing detail never fails a video)."""
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "v:0", str(path)],
+                             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, check=True).stdout
+        v = json.loads(out)["streams"][0]
+    except (subprocess.SubprocessError, OSError, ValueError, KeyError, IndexError):
+        return None
+    return {"vcodec": v.get("codec_name"), "width": v.get("width"), "height": v.get("height"), "fps": _fps(v)}
+
+
 def probe(path: Path) -> dict:
     """Return {duration_s, fps, vcodec, width, height, container, max_keyframe_gap_s} via ffprobe."""
     out = subprocess.run(
@@ -55,22 +74,21 @@ def probe(path: Path) -> dict:
     v = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), None)
     if not v:
         raise ValueError("No video stream found")
-    fps = 0.0
-    try:
-        n, d = v.get("avg_frame_rate", "0/1").split("/")
-        fps = float(n) / float(d) if float(d) else 0.0
-    except ValueError:
-        pass
     dur = data.get("format", {}).get("duration") or v.get("duration")
     return {
         "duration_s": float(dur) if dur else None,
-        "fps": fps or None,
+        "fps": _fps(v),
         "vcodec": v.get("codec_name"),
         "width": v.get("width"),
         "height": v.get("height"),
         "container": data.get("format", {}).get("format_name", ""),
         "max_keyframe_gap_s": probe_keyframe_gap(path),
     }
+
+
+def keeps_format(src: Path, info: dict) -> bool:
+    """Can this file be copied into a playable MP4 as it is? H.264 or HEVC video in an MP4."""
+    return info.get("vcodec") in ("h264", "hevc") and "mp4" in info.get("container", "") and src.suffix.lower() == ".mp4"
 
 
 def is_small(info: dict) -> bool:
@@ -81,9 +99,15 @@ def is_small(info: dict) -> bool:
 
 def build_playback_cmd(src: Path, dest: Path, info: dict) -> list[str]:
     """ffmpeg command for the browser-playable copy (H.264 + AAC, faststart). The original is never touched.
-    A plain remux is used when the source is already H.264 in MP4 *and* either has frequent keyframes or is small
+    With info["keep_format"] set (the project setting) H.264 / HEVC MP4 files are always copied as they are.
+    Otherwise a plain remux is used when the source is already H.264 in MP4 *and* either has frequent keyframes or is small
     (at most 1280x720: re-encoding such a video only makes it bigger and slower to make, while stepping through it is
     cheap to decode anyway). Anything else is re-encoded with a keyframe about every second so frame stepping stays smooth."""
+    if info.get("keep_format") and keeps_format(src, info):
+        # the project wants exactly what the stream gave: the video is copied, never re-encoded. HEVC gets the hvc1 tag Safari needs.
+        # Only the sound is converted (cheap), because some cameras send sound an MP4 cannot hold as it is.
+        tag = ["-tag:v", "hvc1"] if info.get("vcodec") == "hevc" else []
+        return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c:v", "copy", *tag, "-c:a", "aac", "-movflags", "+faststart", str(dest)]
     gap = info.get("max_keyframe_gap_s")
     frequent_keyframes = gap is not None and gap <= MAX_KEYFRAME_GAP_S
     remux_ok = (info.get("vcodec") == "h264" and "mp4" in info.get("container", "") and src.suffix.lower() == ".mp4"

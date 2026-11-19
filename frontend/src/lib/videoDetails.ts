@@ -79,15 +79,26 @@ export function videoDetails(v: Video, now: number): Detail[] {
     }
   }
 
-  out.push({ label: "Video", value: fmtStream(v.width, v.height, v.fps, v.vcodec) });
+  const original = fmtStream(v.width, v.height, v.fps, v.vcodec);
+  const copyKnown = !!v.playback_vcodec && !v.video_removed_at;
   if (v.video_removed_at) {
+    out.push({ label: "Video", value: original });
     out.push({ label: "Video file", value: `deleted on ${fmtDateTime(v.video_removed_at)} to free space`, tone: "warn" });
     out.push({ label: "Original size", value: fmtBytes(v.file_size) });
+  } else if (copyKnown) {
+    // two files are kept: the recording as it came in, and the copy the browser plays: show the format of both
+    const copy = fmtStream(v.playback_width ?? null, v.playback_height ?? null, v.playback_fps ?? null, v.playback_vcodec ?? null);
+    const same = v.playback_vcodec === v.vcodec && v.playback_width === v.width && v.playback_height === v.height;
+    out.push({ label: "Original", value: `${original} · ${fmtBytes(v.file_size)}` });
+    out.push({ label: "Playable copy", value: `${copy} · ${fmtBytes(v.playback_size)} · ${same ? "copied as it is" : "converted"}`, tone: same ? undefined : "warn" });
   } else if (v.playback_size) {
-    // two files are kept: the recording as it came in, and the smaller copy the browser plays
+    out.push({ label: "Video", value: original });
     out.push({ label: "Original size", value: fmtBytes(v.file_size) });
-    out.push({ label: "Playable copy", value: `${fmtBytes(v.playback_size)} · up to 1280 px wide` });
-  } else out.push({ label: "File size", value: fmtBytes(v.file_size) });
+    out.push({ label: "Playable copy", value: fmtBytes(v.playback_size) });
+  } else {
+    out.push({ label: "Video", value: original });
+    out.push({ label: "File size", value: fmtBytes(v.file_size) });
+  }
 
   const total = v.mark_total;
   out.push({ label: "Marks", value: total ? `${total} · ▲ IN ${v.mark_in} · ▼ OUT ${v.mark_out}` : "none yet", tone: total ? undefined : "muted" });

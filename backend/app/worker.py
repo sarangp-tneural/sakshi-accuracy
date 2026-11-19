@@ -11,7 +11,7 @@ from sqlalchemy import select
 from . import control, liveness, media, rtsp, stills
 from .config import settings
 from .db import SessionLocal
-from .models import Video, now
+from .models import Project, Video, now
 from .storage import video_dir, video_path
 
 log = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ MEDIA_QUEUE = "media"
 celery.conf.task_routes = {
     "app.worker.process_upload": {"queue": MEDIA_QUEUE},
     "app.worker.finalize_recording": {"queue": MEDIA_QUEUE},
+    "app.worker.convert_to_h264": {"queue": MEDIA_QUEUE},
 }
 
 
@@ -61,12 +62,16 @@ def _finish_media(db, v: Video, src: Path) -> str | None:
     started = time.monotonic()
     try:
         info = media.probe(src)
+        project = db.get(Project, v.project_id)
+        info["keep_format"] = project.keep_format if project else True
         v.duration_s, v.fps = info["duration_s"], info["fps"]
         v.width, v.height, v.vcodec = info.get("width"), info.get("height"), info.get("vcodec")
         playback = video_dir(v.id) / "playback.mp4"
         how = media.make_playback(src, playback, info)
         v.playback_path = str(playback)
         v.playback_size = _size(playback)
+        out = media.probe_stream(playback) or {}
+        v.playback_vcodec, v.playback_width, v.playback_height, v.playback_fps = (out.get(k) for k in ("vcodec", "width", "height", "fps"))
         v.status = "ready"
         log.info("video %s: playable copy %s in %.0fs (%s %sx%s, %.0fs of video, %.0f MB -> %.0f MB)", v.id, how,
                  time.monotonic() - started, info.get("vcodec"), info.get("width"), info.get("height"), info.get("duration_s") or 0,
@@ -160,6 +165,41 @@ def finalize_recording(video_id: int, partial: bool | None = None) -> None:
                 v.status_reason = _join(reason, COPY_NOTE if how == "copied" else None)
             db.commit()
         finally:
+            control.clear_heartbeat(video_id)
+
+
+@celery.task
+def convert_to_h264(video_id: int, previous_status: str = "ready") -> None:
+    """Someone asked to convert a video whose copy does not play (usually HEVC) to H.264, at most 1280 px wide. The old copy is
+    kept until the new one is complete; if the conversion fails the video goes back to how it was, with the reason in its note."""
+    with SessionLocal() as db:
+        v = db.get(Video, video_id)
+        if not v or v.status != "processing" or not v.file_path or v.video_removed_at is not None:
+            return
+        control.heartbeat(video_id, control.FINISHING_TTL_S)
+        started = time.monotonic()
+        folder = video_dir(video_id)
+        final, tmp = folder / "playback.mp4", folder / "playback.h264.mp4"
+        v.converting_at = now()
+        db.commit()
+        try:
+            info = media.probe(Path(v.file_path))
+            info["keep_format"] = False
+            if media.make_playback(Path(v.file_path), tmp, info) != "ready":
+                raise RuntimeError("the conversion took too long")
+            tmp.replace(final)
+            v.playback_path, v.playback_size = str(final), _size(final)
+            out = media.probe_stream(final) or {}
+            v.playback_vcodec, v.playback_width, v.playback_height, v.playback_fps = (out.get(k) for k in ("vcodec", "width", "height", "fps"))
+            v.status = previous_status
+            log.info("video %s: converted to H.264 in %.0fs", video_id, time.monotonic() - started)
+        except Exception as e:  # noqa: BLE001
+            log.warning("video %s: could not convert to H.264: %s", video_id, e)
+            tmp.unlink(missing_ok=True)
+            v.status, v.status_reason = previous_status, _join(v.status_reason, f"Could not convert to H.264: {str(e)[:300]}")
+        finally:
+            v.converted_at = now()
+            db.commit()
             control.clear_heartbeat(video_id)
 
 

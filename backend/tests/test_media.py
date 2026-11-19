@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 from app import media
@@ -107,3 +108,46 @@ def test_small_but_not_h264_or_not_mp4_is_still_reencoded():
     small = dict(max_keyframe_gap_s=10.0, width=640, height=360)
     assert "libx264" in media.build_playback_cmd(SRC, DEST, info(vcodec="hevc", **small))
     assert "libx264" in media.build_playback_cmd(Path("a.avi"), DEST, info(container="avi", **small))
+
+
+def test_keep_format_copies_h264_and_hevc_mp4_untouched():
+    for codec in ("h264", "hevc"):
+        cmd = media.build_playback_cmd(SRC, DEST, info(vcodec=codec, keep_format=True, max_keyframe_gap_s=10.0, width=3840, height=2160))
+        assert cmd[cmd.index("-c:v") + 1] == "copy" and "libx264" not in cmd and "-vf" not in cmd
+        if codec == "hevc":
+            assert cmd[cmd.index("-tag:v") + 1] == "hvc1"
+        else:
+            assert "-tag:v" not in cmd
+        assert cmd[cmd.index("-c:a") + 1] == "aac" and "+faststart" in cmd
+
+
+def test_keep_format_still_converts_what_an_mp4_cannot_hold_as_it_is():
+    assert "libx264" in media.build_playback_cmd(SRC, DEST, info(vcodec="mpeg4", keep_format=True))
+    assert "libx264" in media.build_playback_cmd(Path("a.avi"), DEST, info(container="avi", keep_format=True, max_keyframe_gap_s=10.0))
+    assert "libx264" in media.build_playback_cmd(SRC, DEST, info(vcodec="hevc", keep_format=False))  # setting off: today's behaviour
+
+
+def test_real_hevc_clip_stays_hevc_when_the_format_is_kept(tmp_path):
+    import subprocess
+    clip, out = tmp_path / "h.mp4", tmp_path / "play.mp4"
+    r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=25:duration=4", "-c:v", "libx265",
+                        "-preset", "ultrafast", "-tag:v", "hev1", str(clip)], capture_output=True)
+    if r.returncode != 0:
+        pytest.skip("this ffmpeg has no HEVC encoder")
+    p = media.probe(clip)
+    media.make_playback(clip, out, {**p, "keep_format": True})
+    q = media.probe(out)
+    assert q["vcodec"] == "hevc" and (q["width"], q["height"]) == (1920, 1080)
+    tag = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_tag_string", "-of", "csv=p=0", str(out)],
+                         capture_output=True, text=True).stdout.strip()
+    assert tag == "hvc1"
+
+
+def test_probe_stream_reads_the_format_and_never_raises(tmp_path):
+    clip = tmp_path / "c.mp4"
+    _clip(clip, "640x360")
+    got = media.probe_stream(clip)
+    assert got["vcodec"] == "h264" and (got["width"], got["height"]) == (640, 360) and got["fps"] == 25.0
+    bad = tmp_path / "bad.mp4"
+    bad.write_bytes(b"p")
+    assert media.probe_stream(bad) is None and media.probe_stream(tmp_path / "missing.mp4") is None

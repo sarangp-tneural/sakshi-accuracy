@@ -19,6 +19,7 @@ class ProjectIn(BaseModel):
 
 class ProjectPatch(BaseModel):
     still_moments: bool | None = None
+    keep_format: bool | None = None
 
 
 class ProjectOut(BaseModel):
@@ -26,6 +27,7 @@ class ProjectOut(BaseModel):
     id: int
     name: str
     still_moments: bool = False  # Find / Skip still moments is offered on this project's videos
+    keep_format: bool = True  # videos keep the stream's own format (no conversion)
     created_at: datetime
     # filled in by the list endpoint (zeros for a project that was just created)
     video_count: int = 0
@@ -96,6 +98,10 @@ class VideoOut(BaseModel):
     ended_at: datetime | None = None
     file_size: int | None = None
     playback_size: int | None = None
+    playback_vcodec: str | None = None
+    playback_width: int | None = None
+    playback_height: int | None = None
+    playback_fps: float | None = None
     picked_up_at: datetime | None = None
     queued_at: datetime | None = None
     converting_at: datetime | None = None

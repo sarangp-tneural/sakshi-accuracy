@@ -36,7 +36,7 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
 const body = (b: unknown) => JSON.stringify(b);
 
 export interface Project {
-  id: number; name: string; created_at: string; still_moments: boolean;
+  id: number; name: string; created_at: string; still_moments: boolean; keep_format: boolean;
   video_count: number; recording_count: number; connecting_count: number; processing_count: number; failed_count: number; camera_count: number;
   mark_total: number; mark_in: number; mark_out: number; compared_count: number; total_duration_s: number; last_activity_at: string | null;
 }
@@ -53,6 +53,7 @@ export interface Video {
   // after recording: when the playable copy was queued, its conversion started and ended; and its size (null on older videos)
   picked_up_at?: string | null; queued_at?: string | null; converting_at?: string | null; converted_at?: string | null;
   playback_size?: number | null;
+  playback_vcodec?: string | null; playback_width?: number | null; playback_height?: number | null; playback_fps?: number | null; // the copy's own format
   lines: VirtualLine[];
   roi?: Roi | null;
 }
@@ -128,7 +129,7 @@ export const api = {
   me: () => req<{ id: number; email: string }>("/auth/me"),
   login: (email: string, password: string) => req<{ token: string }>("/auth/login", { method: "POST", body: body({ email, password }) }),
   projects: () => req<Project[]>("/projects"),
-  updateProject: (id: number, patch: { still_moments?: boolean }) => req<Project>(`/projects/${id}`, { method: "PATCH", body: body(patch) }),
+  updateProject: (id: number, patch: { still_moments?: boolean; keep_format?: boolean }) => req<Project>(`/projects/${id}`, { method: "PATCH", body: body(patch) }),
   deleteProject: (id: number) => req<void>(`/projects/${id}`, { method: "DELETE" }),
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: body({ name }) }),
   videos: (pid: number, params: URLSearchParams, signal?: AbortSignal) => req<VideoList>(`/projects/${pid}/videos?${params.toString()}`, { signal }),
@@ -153,6 +154,7 @@ export const api = {
   putVideoLines: (id: number, lines: VirtualLine[]) => req<Video>(`/videos/${id}/lines`, { method: "PUT", body: body({ lines }) }),
   deleteCamera: (id: number) => req<void>(`/cameras/${id}`, { method: "DELETE" }),
   recordCamera: (id: number, minutes?: number) => req<Video>(`/cameras/${id}/record`, { method: "POST", body: body(minutes === undefined ? {} : { minutes }) }),
+  convertVideo: (id: number) => req<Video>(`/videos/${id}/convert`, { method: "POST" }),
   stopRecording: (id: number) => req<Video>(`/videos/${id}/stop`, { method: "POST" }),
   deleteVideo: (id: number) => req<void>(`/videos/${id}`, { method: "DELETE" }),
   removeVideoFile: (id: number) => req<{ video: Video; freed_bytes: number }>(`/videos/${id}/file`, { method: "DELETE" }),

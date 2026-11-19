@@ -85,10 +85,13 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
 def patch_project(project_id: int, body: ProjectPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Change project settings. Turning still moments off only hides the buttons; results already found are kept."""
+    """Change project settings. Turning still moments off only hides the buttons; results already found are kept.
+    keep_format only affects videos whose playable copy is made from now on."""
     p = get_project(db, user, project_id)
     if body.still_moments is not None:
         p.still_moments = body.still_moments
+    if body.keep_format is not None:
+        p.keep_format = body.keep_format
     db.commit()
     return with_summary(db, [p])[0]
 

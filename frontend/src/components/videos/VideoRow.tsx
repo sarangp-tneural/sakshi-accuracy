@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { Video } from "../../api";
 import { fmtClock, fmtDateShort, fmtTime, recordingProgress } from "../../lib/format";
 import { RECORDER_HINT, waitingForRecorder } from "../../lib/cameras";
-import { attemptingFor, canRemoveFile, isActive, isExportable, isFileRemoved, isOpenable, parseAttempt, processingPhase, secondsBetween, stopLabel } from "../../lib/videoRow";
+import { attemptingFor, canRemoveFile, isActive, canConvert, isExportable, isFileRemoved, isOpenable, parseAttempt, processingPhase, secondsBetween, stopLabel } from "../../lib/videoRow";
 import { videoDetails } from "../../lib/videoDetails";
 import { Button, Spinner } from "../ui/bits";
 import RowMenu, { type MenuItem } from "./RowMenu";
@@ -65,12 +65,14 @@ interface Props {
   onExport: (v: Video) => void;
   onDelete: (v: Video) => void;
   onRemoveFile: (v: Video) => void;
+  onConvert: (v: Video) => void;
 }
 
-function VideoRow({ v, now, expanded, onToggle, onOpen, onStop, onExport, onDelete, onRemoveFile }: Props) {
+function VideoRow({ v, now, expanded, onToggle, onOpen, onStop, onExport, onDelete, onRemoveFile, onConvert }: Props) {
   const openable = isOpenable(v);
   const menu: MenuItem[] = [];
   if (isExportable(v)) menu.push({ label: "Export…", onSelect: () => onExport(v) });
+  if (canConvert(v)) menu.push({ label: "Convert to H.264…", onSelect: () => onConvert(v) });
   if (canRemoveFile(v)) menu.push({ label: "Delete video file…", danger: true, onSelect: () => onRemoveFile(v) });
   menu.push({ label: "Delete…", danger: true, onSelect: () => onDelete(v) });
   const detailId = `vd-${v.id}`;

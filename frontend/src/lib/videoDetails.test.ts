@@ -168,6 +168,15 @@ describe("videoDetails: after recording (timeline and sizes)", () => {
     expect(get(d, "Playable copy")?.value).toContain(fmtBytes(1_200_000_000));
     expect(get(d, "File size")).toBeUndefined();
   });
+  it("shows the format before and after: converted, or copied as it is", () => {
+    const conv = videoDetails({ ...done, vcodec: "hevc", width: 1920, height: 1080, fps: 25, playback_vcodec: "h264", playback_width: 1280, playback_height: 720, playback_fps: 25 }, 0);
+    expect(get(conv, "Original")?.value).toBe(`1920×1080 · 25 fps · H.265 · ${fmtBytes(854_000_000)}`);
+    expect(get(conv, "Playable copy")?.value).toBe(`1280×720 · 25 fps · H.264 · ${fmtBytes(1_200_000_000)} · converted`);
+    const kept = videoDetails({ ...done, vcodec: "hevc", width: 1920, height: 1080, fps: 25, playback_vcodec: "hevc", playback_width: 1920, playback_height: 1080, playback_fps: 25 }, 0);
+    expect(get(kept, "Playable copy")?.value).toContain("H.265");
+    expect(get(kept, "Playable copy")?.value).toContain("copied as it is");
+    expect(get(kept, "Video")).toBeUndefined();
+  });
   it("counts live while waiting and while compressing", () => {
     const now = Date.parse("2026-11-10T12:06:01Z");
     const waiting = videoDetails(rtsp({ status: "processing", queued_at: "2026-11-10T12:05:01Z" }), now);
