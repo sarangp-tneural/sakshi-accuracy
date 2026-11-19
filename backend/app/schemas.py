@@ -95,6 +95,11 @@ class VideoOut(BaseModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     file_size: int | None = None
+    playback_size: int | None = None
+    picked_up_at: datetime | None = None
+    queued_at: datetime | None = None
+    converting_at: datetime | None = None
+    converted_at: datetime | None = None
     width: int | None = None
     height: int | None = None
     vcodec: str | None = None

@@ -73,17 +73,25 @@ def probe(path: Path) -> dict:
     }
 
 
+def is_small(info: dict) -> bool:
+    """Known to be at most 1280x720 (either way up). Unknown size counts as not small."""
+    w, h = info.get("width"), info.get("height")
+    return bool(w and h and max(w, h) <= 1280 and min(w, h) <= 720)
+
+
 def build_playback_cmd(src: Path, dest: Path, info: dict) -> list[str]:
     """ffmpeg command for the browser-playable copy (H.264 + AAC, faststart). The original is never touched.
-    A plain remux is used only when the source is already H.264 in MP4 *and* has frequent keyframes;
-    otherwise it is re-encoded with a keyframe about every second so frame stepping stays smooth."""
+    A plain remux is used when the source is already H.264 in MP4 *and* either has frequent keyframes or is small
+    (at most 1280x720: re-encoding such a video only makes it bigger and slower to make, while stepping through it is
+    cheap to decode anyway). Anything else is re-encoded with a keyframe about every second so frame stepping stays smooth."""
     gap = info.get("max_keyframe_gap_s")
+    frequent_keyframes = gap is not None and gap <= MAX_KEYFRAME_GAP_S
     remux_ok = (info.get("vcodec") == "h264" and "mp4" in info.get("container", "") and src.suffix.lower() == ".mp4"
-                and gap is not None and gap <= MAX_KEYFRAME_GAP_S)
+                and (frequent_keyframes or is_small(info)))
     if remux_ok:
         return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c", "copy", "-movflags", "+faststart", str(dest)]
     gop = str(max(1, round(info.get("fps") or 25)))
-    return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
+    return ["ffmpeg", "-y", "-nostdin", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
             "-vf", PLAYBACK_SCALE, "-pix_fmt", "yuv420p", "-g", gop, "-keyint_min", gop, "-sc_threshold", "0",
             "-c:a", "aac", "-movflags", "+faststart", str(dest)]
 

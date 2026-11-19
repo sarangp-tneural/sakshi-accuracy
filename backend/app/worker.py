@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -40,9 +41,24 @@ def _join(*parts: str | None) -> str | None:
     return text or None
 
 
+def mark_queued(v: Video) -> None:
+    """The playable copy is waiting for the media worker (again): its conversion has not started."""
+    v.queued_at, v.converting_at, v.converted_at = now(), None, None
+
+
+def _convert(db, v: Video, src: Path) -> str | None:
+    """_finish_media, with the start and end of the conversion recorded (the start is saved first, so the row can say "compressing")."""
+    v.converting_at = now()
+    db.commit()
+    how = _finish_media(db, v, src)
+    v.converted_at = now()
+    return how
+
+
 def _finish_media(db, v: Video, src: Path) -> str | None:
     """Probe the file and make the playable copy. Success: sets playback_path and status "ready", returns how it was made
     ("ready" or "copied"). Failure: sets status "failed" and returns None."""
+    started = time.monotonic()
     try:
         info = media.probe(src)
         v.duration_s, v.fps = info["duration_s"], info["fps"]
@@ -50,9 +66,14 @@ def _finish_media(db, v: Video, src: Path) -> str | None:
         playback = video_dir(v.id) / "playback.mp4"
         how = media.make_playback(src, playback, info)
         v.playback_path = str(playback)
+        v.playback_size = _size(playback)
         v.status = "ready"
+        log.info("video %s: playable copy %s in %.0fs (%s %sx%s, %.0fs of video, %.0f MB -> %.0f MB)", v.id, how,
+                 time.monotonic() - started, info.get("vcodec"), info.get("width"), info.get("height"), info.get("duration_s") or 0,
+                 (_size(src) or 0) / 1e6, (_size(playback) or 0) / 1e6)
         return how
     except Exception as e:  # noqa: BLE001
+        log.warning("video %s: could not make the playable copy after %.0fs: %s", v.id, time.monotonic() - started, e)
         v.status, v.status_reason = "failed", f"Could not prepare video: {str(e)[:300]}"
         return None
 
@@ -63,7 +84,7 @@ def process_upload(video_id: int) -> None:
         v = db.get(Video, video_id)
         if not v:
             return
-        how = _finish_media(db, v, Path(v.file_path))
+        how = _convert(db, v, Path(v.file_path))
         if how == "copied":
             v.status_reason = _join(v.status_reason, COPY_NOTE)
         db.commit()
@@ -79,6 +100,7 @@ def record_rtsp(video_id: int) -> None:
         if not v or v.status != "connecting":  # e.g. it was stopped or settled between being created and being picked up
             return
         control.heartbeat(video_id)  # "something is working on this" from the very first moment
+        v.picked_up_at = now()
         try:
             if control.stop_requested(video_id):  # Stop was pressed while this was still waiting in the queue
                 v.status, v.status_reason, v.ended_at = "failed", "Cancelled before the camera connected.", now()
@@ -110,6 +132,7 @@ def record_rtsp(video_id: int) -> None:
                 # The recording is over. From here on it is "saving", not "recording": the timer stops, the camera is free again
                 # and Stop no longer applies.
                 v.status, v.status_reason = "processing", res["reason"]
+                mark_queued(v)
                 db.commit()
                 # The playable copy is made by finalize_recording, on the media queue (one conversion at a time).
                 finalize_recording.delay(video_id, res["status"] == "partial")
@@ -119,9 +142,9 @@ def record_rtsp(video_id: int) -> None:
 
 
 @celery.task
-def finalize_recording(video_id: int, partial: bool = True) -> None:
-    """Turn the footage of a finished recording into a playable video. Marked partial unless the recording was complete
-    (a recording that lost its recorder is always partial)."""
+def finalize_recording(video_id: int, partial: bool | None = None) -> None:
+    """Turn the footage of a finished recording into a playable video. Marked partial unless the recording was complete.
+    When `partial` is not given, a recording that ended with a reason (it was cut short, or lost its recorder) is partial."""
     with SessionLocal() as db:
         v = db.get(Video, video_id)
         if not v or v.status != "processing":
@@ -129,7 +152,9 @@ def finalize_recording(video_id: int, partial: bool = True) -> None:
         control.heartbeat(video_id, control.FINISHING_TTL_S)
         try:
             reason = v.status_reason
-            how = _finish_media(db, v, Path(v.file_path))
+            if partial is None:
+                partial = bool(reason)
+            how = _convert(db, v, Path(v.file_path))
             if how is not None:
                 v.status = "partial" if partial else "ready"
                 v.status_reason = _join(reason, COPY_NOTE if how == "copied" else None)
@@ -184,9 +209,35 @@ def reap_orphans(min_age_s: int = MIN_AGE_S) -> int:
         return len(dead)
 
 
+def requeue_stuck_processing(min_age_s: int = MIN_AGE_S) -> int:
+    """Queue the playable copy again for recordings stuck on "processing": the media worker was restarted while it was
+    converting them (or before it picked them up). Anything still queued, running or recently started is left alone."""
+    with SessionLocal() as db:
+        cutoff = now() - timedelta(seconds=min_age_s)
+        rows = list(db.scalars(select(Video).where(Video.status == "processing", Video.source == "rtsp", Video.ended_at < cutoff,
+                                                   Video.file_path.is_not(None))).all())
+        if not rows:
+            return 0
+        live = liveness.live_among([v.id for v in rows], celery)
+        if live is None:
+            return 0
+        stuck = [v for v in rows if v.id not in live and v.file_path and Path(v.file_path).is_file()]
+        for v in stuck:
+            log.warning("recording %s was left on processing (its media worker stopped); converting it again", v.id)
+            mark_queued(v)
+            db.commit()
+            enqueue(finalize_recording, v.id)
+        return len(stuck)
+
+
+def _on_start() -> None:
+    log.info("settled %s orphaned recording(s)", reap_orphans())
+    log.info("queued %s recording(s) stuck on processing", requeue_stuck_processing())
+
+
 @worker_ready.connect
 def _on_worker_ready(**_kw) -> None:
-    t = threading.Timer(REAP_DELAY_S, lambda: log.info("settled %s orphaned recording(s)", reap_orphans()))
+    t = threading.Timer(REAP_DELAY_S, _on_start)
     t.daemon = True
     t.start()
 

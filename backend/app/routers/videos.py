@@ -166,6 +166,7 @@ async def upload_video(project_id: int, file: UploadFile = File(...), db: Sessio
         raise
     v.file_path = str(dest)
     v.file_size = size
+    worker.mark_queued(v)
     db.commit()
     worker.enqueue(worker.process_upload, v.id)
     db.refresh(v)

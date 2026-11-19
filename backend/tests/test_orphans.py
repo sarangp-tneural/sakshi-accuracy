@@ -67,7 +67,7 @@ def test_heartbeat_is_set_with_a_ttl_cleared_and_never_raises(fake):
 
 @pytest.mark.parametrize("args, expected", [
     ([118], 118), ((5,), 5), ("(118,)", 118), ("(118, )", 118), ("118", 118), (" (7,) ", 7),
-    ("(1, 2)", None), ("()", None), ([], None), (None, None), ("(abc,)", None), (["x"], None),
+    ("(1, 2)", None), ("()", None), ([], None), ("(118, False)", 118), ("(118, True)", 118), ("(1, 2)", None), (None, None), ("(abc,)", None), (["x"], None),
 ])
 def test_video_id_from_task_arguments(args, expected):
     assert control.video_id_from_args(args) == expected
@@ -322,3 +322,91 @@ def test_settle_orphan_directly(pid, fake, tmp_path):
     with SessionLocal() as db:
         orphans.settle_orphan(db, db.get(Video, vid))
     assert video(vid).status == "failed" and f"sv:stop:{vid}" not in fake.data
+
+
+# ---------------------------------------------------------------- recordings left on "processing"
+def stuck(pid, tmp_path, *, ended_ago_s=300, reason=None, with_file=True, name="stuck"):
+    vid = recording(pid, status="processing", file_bytes=100 if with_file else 0, tmp=tmp_path, name=name)
+    with SessionLocal() as db:
+        v = db.get(Video, vid)
+        v.ended_at, v.status_reason = datetime.now(timezone.utc) - timedelta(seconds=ended_ago_s), reason
+        db.commit()
+    return vid
+
+
+def test_stuck_processing_recordings_are_queued_again(pid, monkeypatch, tmp_path):
+    queued = []
+    monkeypatch.setattr(worker, "enqueue", lambda t, vid: queued.append((t.name, vid)))
+    monkeypatch.setattr(liveness, "live_among", lambda ids, celery_app=None: set())
+    old = stuck(pid, tmp_path, name="old")
+    stuck(pid, tmp_path, ended_ago_s=3, name="just-ended")      # may still be on its way to the media queue
+    stuck(pid, tmp_path, with_file=False, name="no-footage")      # nothing to convert
+    assert worker.requeue_stuck_processing() == 1
+    assert queued == [("app.worker.finalize_recording", old)]
+
+
+def test_processing_recordings_that_are_queued_or_running_are_left_alone(pid, monkeypatch, tmp_path):
+    queued = []
+    monkeypatch.setattr(worker, "enqueue", lambda t, vid: queued.append(vid))
+    busy = stuck(pid, tmp_path, name="busy")
+    monkeypatch.setattr(liveness, "live_among", lambda ids, celery_app=None: {busy} & set(ids))
+    assert worker.requeue_stuck_processing() == 0 and queued == []
+    monkeypatch.setattr(liveness, "live_among", lambda ids, celery_app=None: None)  # Redis cannot be asked: never guess
+    assert worker.requeue_stuck_processing() == 0 and queued == []
+
+
+def test_the_media_queue_counts_as_queued(pid, fake, monkeypatch, tmp_path):
+    vid = stuck(pid, tmp_path)
+    fake.rpush("media", json.dumps({"headers": {"task": "app.worker.finalize_recording", "argsrepr": f"({vid}, False)"}}))
+    assert REAL_LIVE_AMONG([vid], worker.celery) == {vid}
+
+
+def test_a_requeued_recording_is_partial_only_if_it_ended_with_a_reason(pid, fake, monkeypatch, tmp_path):
+    fake_media(monkeypatch)
+    complete = stuck(pid, tmp_path, reason=None, name="complete")
+    cut = stuck(pid, tmp_path, reason="The camera stopped early.", name="cut")
+    worker.finalize_recording(complete)
+    worker.finalize_recording(cut)
+    assert video(complete).status == "ready" and video(cut).status == "partial"
+
+
+# ---------------------------------------------------------------- the timeline of a recording
+def test_each_step_after_requesting_a_recording_is_timed(pid, fake, monkeypatch, tmp_path):
+    fake_media(monkeypatch)
+    vid = recording(pid, status="connecting", file_bytes=100, tmp=tmp_path)
+    monkeypatch.setattr(rtsp, "run_recording", lambda *a, **k: {"status": "saved", "reason": None, "elapsed": 60})
+    seen = {}
+    real = media.make_playback
+
+    def spy(src, dest, info):
+        v = video(vid)  # while converting: queued and started, not finished
+        seen["during"] = (v.queued_at is not None, v.converting_at is not None, v.converted_at)
+        return real(src, dest, info)
+
+    monkeypatch.setattr(media, "make_playback", spy)
+    worker.record_rtsp(vid)
+    v = video(vid)
+    assert seen["during"] == (True, True, None)
+    assert v.status == "ready" and v.playback_size == 1
+    assert v.picked_up_at <= v.queued_at <= v.converting_at <= v.converted_at
+
+
+def test_a_failed_conversion_is_still_timed(pid, fake, monkeypatch, tmp_path):
+    monkeypatch.setattr(media, "probe", lambda p: (_ for _ in ()).throw(ValueError("no video")))
+    vid = stuck(pid, tmp_path)
+    worker.finalize_recording(vid)
+    v = video(vid)
+    assert v.status == "failed" and v.converting_at is not None and v.converted_at is not None and v.playback_size is None
+
+
+def test_queueing_again_resets_the_conversion_times(pid, monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "enqueue", lambda t, vid: None)
+    monkeypatch.setattr(liveness, "live_among", lambda ids, celery_app=None: set())
+    vid = stuck(pid, tmp_path)
+    with SessionLocal() as db:
+        v = db.get(Video, vid)
+        v.converting_at = v.converted_at = datetime.now(timezone.utc)
+        db.commit()
+    assert worker.requeue_stuck_processing() == 1
+    v = video(vid)
+    assert v.queued_at is not None and v.converting_at is None and v.converted_at is None

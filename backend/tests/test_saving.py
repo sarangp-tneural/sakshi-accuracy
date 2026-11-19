@@ -156,3 +156,15 @@ def test_an_upload_gets_the_copy_note_too(pid, monkeypatch, tmp_path):
 
 def test_join_helper():
     assert worker._join(None, None) is None and worker._join("a", None) == "a" and worker._join("a", "b") == "a b" and worker._join("", "b") == "b"
+
+
+def test_an_upload_is_timed_and_its_copy_size_stored(client, auth, pid, monkeypatch, tmp_path):
+    monkeypatch.setattr(media, "probe", lambda p: {"duration_s": 10.0, "fps": 25.0, "vcodec": "h264", "width": 1, "height": 1,
+                                                   "container": "mp4", "max_keyframe_gap_s": 1.0})
+    monkeypatch.setattr(media, "make_playback", lambda src, dest, info: Path(dest).write_bytes(b"ppp") and "ready")
+    r = client.post(f"/api/projects/{pid}/videos/upload", files={"file": ("a.mp4", b"x" * 100, "video/mp4")}, headers=auth)
+    assert r.status_code == 201 and r.json()["queued_at"] and r.json()["converting_at"] is None  # waiting for the media worker
+    worker.process_upload(r.json()["id"])
+    v = video(r.json()["id"])
+    assert v.status == "ready" and v.playback_size == 3 and v.file_size == 100
+    assert v.queued_at <= v.converting_at <= v.converted_at

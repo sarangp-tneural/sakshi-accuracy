@@ -58,19 +58,52 @@ def test_other_formats_are_reencoded_and_missing_fps_defaults_to_25():
     assert "libx264" in media.build_playback_cmd(SRC, DEST, info(vcodec="hevc"))
 
 
-def test_real_ffprobe_on_a_generated_clip(tmp_path):
+def _clip(path, size):
     import subprocess
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size={size}:rate=25:duration=12",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-g", "100", "-keyint_min", "100", "-sc_threshold", "0", str(path)], check=True)
+
+
+def test_real_ffprobe_on_a_generated_clip(tmp_path):
     clip = tmp_path / "c.mp4"
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=25:duration=12",
-                    "-c:v", "libx264", "-g", "100", "-keyint_min", "100", "-sc_threshold", "0", str(clip)], check=True)
+    _clip(clip, "1920x1080")
     gap = media.probe_keyframe_gap(clip)
     assert gap is not None and 3.9 <= gap <= 4.1  # keyframe every 100 frames = 4 s
     out = tmp_path / "play.mp4"
-    media.make_playback(clip, out, media.probe(clip))
+    media.make_playback(clip, out, media.probe(clip))  # big with sparse keyframes: re-encoded, 1 keyframe a second
     assert media.probe_keyframe_gap(out) <= 1.1
+    assert media.probe(out)["width"] == 1280
+
+
+def test_a_small_clip_is_copied_untouched(tmp_path):
+    clip, out = tmp_path / "c.mp4", tmp_path / "play.mp4"
+    _clip(clip, "640x360")
+    media.make_playback(clip, out, media.probe(clip))
+    info = media.probe(out)
+    assert (info["width"], info["height"]) == (640, 360) and media.probe_keyframe_gap(out) >= 3.9  # copied, not re-encoded
 
 
 def test_playback_copy_is_scaled_down_to_at_most_1280_wide():
     info = {"vcodec": "hevc", "container": "mov,mp4", "fps": 25.0, "max_keyframe_gap_s": 2.0}
     cmd = media.build_playback_cmd(SRC, DEST, info)
     assert cmd[cmd.index("-vf") + 1] == media.PLAYBACK_SCALE and "min(1280,iw)" in media.PLAYBACK_SCALE
+
+
+def test_small_h264_is_copied_even_with_sparse_keyframes():
+    sparse = dict(max_keyframe_gap_s=10.0, width=1280, height=720)
+    cmd = media.build_playback_cmd(SRC, DEST, info(**sparse))
+    assert "copy" in cmd and "libx264" not in cmd
+    assert "copy" in media.build_playback_cmd(SRC, DEST, info(max_keyframe_gap_s=None, width=640, height=360))
+    assert "copy" in media.build_playback_cmd(SRC, DEST, info(max_keyframe_gap_s=10.0, width=720, height=1280))  # portrait
+
+
+def test_big_or_unknown_size_is_still_reencoded_when_keyframes_are_sparse():
+    assert "libx264" in media.build_playback_cmd(SRC, DEST, info(max_keyframe_gap_s=10.0, width=1920, height=1080))
+    assert "libx264" in media.build_playback_cmd(SRC, DEST, info(max_keyframe_gap_s=10.0, width=1280, height=960))
+    assert "libx264" in media.build_playback_cmd(SRC, DEST, info(max_keyframe_gap_s=10.0, width=None, height=None))
+
+
+def test_small_but_not_h264_or_not_mp4_is_still_reencoded():
+    small = dict(max_keyframe_gap_s=10.0, width=640, height=360)
+    assert "libx264" in media.build_playback_cmd(SRC, DEST, info(vcodec="hevc", **small))
+    assert "libx264" in media.build_playback_cmd(Path("a.avi"), DEST, info(container="avi", **small))

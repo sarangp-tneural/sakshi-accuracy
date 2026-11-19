@@ -1,6 +1,6 @@
 import type { Video } from "../api";
 import { waitingForRecorder } from "./cameras";
-import { attemptingFor, parseAttempt } from "./videoRow";
+import { attemptingFor, parseAttempt, processingPhase, secondsBetween } from "./videoRow";
 import { fmtBytes, fmtClock, fmtDateTime, fmtStream, fmtTime } from "./format";
 
 export interface Detail {
@@ -64,10 +64,29 @@ export function videoDetails(v: Video, now: number): Detail[] {
     if (v.duration_s) out.push({ label: "Duration", value: fmtTime(v.duration_s), mono: true });
   }
 
+  // what happened after recording, step by step (older videos did not store these times: nothing is shown)
+  if (v.queued_at) {
+    const phase = processingPhase(v);
+    const took = (a: string | null | undefined, b: string | null | undefined) => { const s = secondsBetween(a, b, now); return s === null ? "—" : fmtClock(s); };
+    if (isRtsp && v.started_at) out.push({ label: "Connected after", value: took(v.created_at, v.started_at), mono: true });
+    out.push({ label: "Waiting to convert", value: v.converting_at ? took(v.queued_at, v.converting_at) : v.converted_at ? "—" : `${took(v.queued_at, null)} so far`,
+      tone: phase === "waiting" ? "warn" : undefined, mono: true });
+    if (v.converting_at) out.push({ label: "Compressing", value: v.converted_at ? took(v.converting_at, v.converted_at) : `${took(v.converting_at, null)} so far`,
+      tone: phase === "compressing" ? "warn" : undefined, mono: true });
+    if (v.converted_at) {
+      out.push({ label: "Finished", value: fmtDateTime(v.converted_at) });
+      out.push({ label: "Total time", value: took(v.created_at, v.converted_at), mono: true });
+    }
+  }
+
   out.push({ label: "Video", value: fmtStream(v.width, v.height, v.fps, v.vcodec) });
   if (v.video_removed_at) {
     out.push({ label: "Video file", value: `deleted on ${fmtDateTime(v.video_removed_at)} to free space`, tone: "warn" });
     out.push({ label: "Original size", value: fmtBytes(v.file_size) });
+  } else if (v.playback_size) {
+    // two files are kept: the recording as it came in, and the smaller copy the browser plays
+    out.push({ label: "Original size", value: fmtBytes(v.file_size) });
+    out.push({ label: "Playable copy", value: `${fmtBytes(v.playback_size)} · up to 1280 px wide` });
   } else out.push({ label: "File size", value: fmtBytes(v.file_size) });
 
   const total = v.mark_total;

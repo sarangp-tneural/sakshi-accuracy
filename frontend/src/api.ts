@@ -50,6 +50,9 @@ export interface Video {
   width: number | null; height: number | null; vcodec: string | null;
   mark_total: number; mark_in: number; mark_out: number; mark_types: Record<string, number>; sakshi_entered: boolean; camera_id: number | null; camera_name: string | null;
   video_removed_at?: string | null; disk_bytes?: number | null; // set once only the video FILE was deleted
+  // after recording: when the playable copy was queued, its conversion started and ended; and its size (null on older videos)
+  picked_up_at?: string | null; queued_at?: string | null; converting_at?: string | null; converted_at?: string | null;
+  playback_size?: number | null;
   lines: VirtualLine[];
   roi?: Roi | null;
 }

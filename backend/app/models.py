@@ -94,6 +94,13 @@ class Video(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes of the original
+    playback_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes of the playable copy
+    # what happened after the request, in order: the recorder took the job, the playable copy was queued, its conversion
+    # started, it finished (or failed)
+    picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    converting_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    converted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vcodec: Mapped[str | None] = mapped_column(String(32), nullable=True)

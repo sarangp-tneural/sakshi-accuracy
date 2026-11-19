@@ -18,6 +18,7 @@ def settle_orphan(db: Session, v: Video) -> None:
     control.clear_stop(v.id)
     if size > 0:
         v.status, v.status_reason, v.file_size = "processing", KEPT, size
+        worker.mark_queued(v)
         db.commit()
         worker.enqueue(worker.finalize_recording, v.id)
     else:

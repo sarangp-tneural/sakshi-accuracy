@@ -13,7 +13,7 @@ Requires: docker, `uv`, Node 20+, `ffmpeg` + `ffprobe`.
 uv run --project backend python scripts/create_user.py you@example.com 'your-password'
 ```
 Open http://localhost:5173. `run.sh` starts Postgres (port 5442) and Redis (6390) via Docker Compose, applies migrations,
-then runs the API (:8000), a Celery worker and the Vite dev server. Videos are stored in `./data`.
+then runs the API (:8000), a recorder worker, a media worker (makes the playable copies, one at a time) and the Vite dev server. Videos are stored in `./data`.
 Config via env vars or `.env` (`SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `DATA_DIR`, `MAX_UPLOAD_BYTES`). **Set `SECRET_KEY` outside dev** — it signs tokens and encrypts RTSP links.
 
 ## Tests

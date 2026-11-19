@@ -17,6 +17,23 @@ export const isExportable = isOpenable;
 /** Still being recorded, or still trying to reach the camera. */
 export const isActive = (v: Pick<Video, "status">) => v.status === "connecting" || v.status === "recording";
 
+/** What "processing" really is right now: waiting for its turn, or compressing. Older videos have no times, so just "processing". */
+export type ProcessingPhase = "waiting" | "compressing" | "processing";
+export function processingPhase(v: Pick<Video, "status" | "queued_at" | "converting_at" | "converted_at">): ProcessingPhase | null {
+  if (v.status !== "processing") return null;
+  if (v.converting_at && !v.converted_at) return "compressing";
+  if (v.queued_at && !v.converting_at) return "waiting";
+  return "processing";
+}
+
+/** Seconds from one ISO time to another (or to `nowMs`); null if either is missing. */
+export function secondsBetween(fromIso: string | null | undefined, toIso: string | null | undefined, nowMs: number): number | null {
+  if (!fromIso) return null;
+  const from = new Date(fromIso).getTime();
+  const to = toIso ? new Date(toIso).getTime() : nowMs;
+  return Number.isNaN(from) || Number.isNaN(to) ? null : Math.max(0, (to - from) / 1000);
+}
+
 /** "Attempt 3 · The camera refused the connection." becomes { n: 3, note: "The camera refused the connection." }. */
 export function parseAttempt(reason: string | null | undefined): { n: number | null; note: string } {
   const m = /^Attempt (\d+)(?:\s·\s(.*))?$/s.exec((reason ?? "").trim());

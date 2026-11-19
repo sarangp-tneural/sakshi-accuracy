@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { Video } from "../../api";
 import { fmtClock, fmtDateShort, fmtTime, recordingProgress } from "../../lib/format";
 import { RECORDER_HINT, waitingForRecorder } from "../../lib/cameras";
-import { attemptingFor, canRemoveFile, isActive, isExportable, isFileRemoved, isOpenable, parseAttempt, stopLabel } from "../../lib/videoRow";
+import { attemptingFor, canRemoveFile, isActive, isExportable, isFileRemoved, isOpenable, parseAttempt, processingPhase, secondsBetween, stopLabel } from "../../lib/videoRow";
 import { videoDetails } from "../../lib/videoDetails";
 import { Button, Spinner } from "../ui/bits";
 import RowMenu, { type MenuItem } from "./RowMenu";
@@ -39,7 +39,18 @@ function StatusCell({ v, now }: { v: Video; now: number }) {
       </div>
     );
   }
-  if (v.status === "processing") return <span className="badge processing"><Spinner label="Processing" /> Processing</span>;
+  if (v.status === "processing") {
+    const phase = processingPhase(v);
+    const since = phase === "waiting" ? v.queued_at : phase === "compressing" ? v.converting_at : null;
+    const secs = secondsBetween(since, null, now);
+    const label = phase === "waiting" ? "Waiting to convert" : phase === "compressing" ? "Compressing" : "Processing";
+    return (
+      <div>
+        <span className="badge processing"><Spinner label={label} /> {label}</span>
+        {secs !== null && <div className="small num muted">{fmtClock(secs)}</div>}
+      </div>
+    );
+  }
   const label = v.status === "ready" ? "Ready" : v.status === "partial" ? "Partial" : "Failed";
   return <span className={`badge ${v.status}`} title={v.status_reason ?? undefined}>{label}</span>;
 }

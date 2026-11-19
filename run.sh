@@ -42,7 +42,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 (cd backend && exec uv run uvicorn app.main:app --port 8000 --reload </dev/null) & pids+=($!)
-(cd backend && exec uv run celery -A app.worker.celery worker -l info -c 4 </dev/null) & pids+=($!)
+# Two workers: one records, one makes the playable copies (ONE at a time, so conversions never fight over the CPU).
+(cd backend && exec uv run celery -A app.worker.celery worker -l info -c 4 -Q celery -n recorder@%h </dev/null) & pids+=($!)
+(cd backend && exec uv run celery -A app.worker.celery worker -l info -c 1 -Q media -n media@%h </dev/null) & pids+=($!)
 (cd frontend && exec npm run dev -- --host </dev/null) & pids+=($!)
 
 echo

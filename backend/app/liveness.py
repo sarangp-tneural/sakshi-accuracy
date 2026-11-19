@@ -35,7 +35,7 @@ def live_among(video_ids: Iterable[int], celery_app) -> set[int] | None:
     if not ids:
         return set()
     try:
-        live = control.heartbeats(sorted(ids)) | control.queued_video_ids()
+        live = control.heartbeats(sorted(ids)) | control.queued_video_ids() | control.queued_video_ids("media")
     except redis.RedisError:
         return None
     if ids - live:  # something is not accounted for: ask the workers too (covers workers that predate the heartbeat)

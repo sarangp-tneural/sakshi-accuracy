@@ -90,3 +90,25 @@ describe("deleting only the video file", () => {
     expect(removeFileWarning({ name: "b", mark_total: 0, sakshi_entered: false, disk_bytes: null, file_size: 2048 }, fmtBytes)).toMatch(/frees about 2\.0 KB\. All its details stay\./);
   });
 });
+
+import { processingPhase, secondsBetween } from "./videoRow";
+
+describe("processingPhase", () => {
+  const p = (o: Record<string, string | null>) => processingPhase({ status: "processing", queued_at: null, converting_at: null, converted_at: null, ...o } as never);
+  it("is waiting until the conversion starts, then compressing", () => {
+    expect(p({ queued_at: "2026-11-19T10:00:00Z" })).toBe("waiting");
+    expect(p({ queued_at: "2026-11-19T10:00:00Z", converting_at: "2026-11-19T10:05:00Z" })).toBe("compressing");
+  });
+  it("is plain processing for older videos without times, and null for other statuses", () => {
+    expect(p({})).toBe("processing");
+    expect(processingPhase({ status: "ready", queued_at: null, converting_at: null, converted_at: null })).toBeNull();
+  });
+});
+
+describe("secondsBetween", () => {
+  it("measures between two times, or up to now", () => {
+    expect(secondsBetween("2026-11-19T10:00:00Z", "2026-11-19T10:01:30Z", 0)).toBe(90);
+    expect(secondsBetween("2026-11-19T10:00:00Z", null, Date.parse("2026-11-19T10:00:10Z"))).toBe(10);
+    expect(secondsBetween(null, null, 0)).toBeNull();
+  });
+});

@@ -41,8 +41,8 @@ export default function VideosTab({ projectId, name }: { projectId: number; name
 
   const uploads = useUploads(projectId, useCallback(() => { toast.success("Upload complete. Preparing the video…"); reload(); }, [toast, reload]));
 
-  // elapsed time of a live recording ticks locally; the server is only polled while something is busy
-  const anyRecording = data?.items.some(isActive) ?? false;
+  // elapsed time of a live recording (and of a conversion in progress) ticks locally; the server is only polled while something is busy
+  const anyRecording = data?.items.some((v) => isActive(v) || v.status === "processing") ?? false;
   useEffect(() => {
     if (!anyRecording) return;
     const t = setInterval(() => setNow(Date.now()), 1000);

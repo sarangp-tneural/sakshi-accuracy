@@ -150,3 +150,36 @@ describe("videoDetails: file deleted", () => {
     expect(get(videoDetails(base, 0), "Video file")).toBeUndefined();
   });
 });
+
+describe("videoDetails: after recording (timeline and sizes)", () => {
+  const done = rtsp({ created_at: "2026-11-10T11:59:00Z", queued_at: "2026-11-10T12:05:01Z", converting_at: "2026-11-10T12:07:01Z",
+    converted_at: "2026-11-10T12:15:01Z", file_size: 854_000_000, playback_size: 1_200_000_000 });
+  it("shows each step's time and the total for a finished video", () => {
+    const d = videoDetails(done, 0);
+    expect(get(d, "Connected after")?.value).toBe("01:00");
+    expect(get(d, "Waiting to convert")?.value).toBe("02:00");
+    expect(get(d, "Compressing")?.value).toBe("08:00");
+    expect(get(d, "Total time")?.value).toBe("16:01");
+    expect(get(d, "Finished")?.value).toBe(fmtDateTime("2026-11-10T12:15:01Z"));
+  });
+  it("shows both files' sizes", () => {
+    const d = videoDetails(done, 0);
+    expect(get(d, "Original size")?.value).toBe(fmtBytes(854_000_000));
+    expect(get(d, "Playable copy")?.value).toContain(fmtBytes(1_200_000_000));
+    expect(get(d, "File size")).toBeUndefined();
+  });
+  it("counts live while waiting and while compressing", () => {
+    const now = Date.parse("2026-11-10T12:06:01Z");
+    const waiting = videoDetails(rtsp({ status: "processing", queued_at: "2026-11-10T12:05:01Z" }), now);
+    expect(get(waiting, "Waiting to convert")?.value).toBe("01:00 so far");
+    expect(get(waiting, "Compressing")).toBeUndefined();
+    const compressing = videoDetails(rtsp({ status: "processing", queued_at: "2026-11-10T12:05:01Z", converting_at: "2026-11-10T12:05:31Z" }), now);
+    expect(get(compressing, "Compressing")?.value).toBe("00:30 so far");
+    expect(get(compressing, "Total time")).toBeUndefined();
+  });
+  it("shows nothing extra for older videos without times, and keeps the single size", () => {
+    const d = videoDetails(rtsp(), 0);
+    expect(get(d, "Waiting to convert")).toBeUndefined();
+    expect(get(d, "File size")?.value).toBe(fmtBytes(40_500_000));
+  });
+});

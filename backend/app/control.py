@@ -119,7 +119,7 @@ def stills_failed(video_id: int) -> bool:
         return False
 
 
-_ARGS = re.compile(r"\(?\s*(\d+)\s*,?\s*\)?")
+_ARGS = re.compile(r"\(?\s*(\d+)\s*(?:,\s*(?:True|False|None)\s*)?,?\s*\)?")  # "(118,)" or "(118, False)"
 RECORDING_TASKS = ("app.worker.record_rtsp", "app.worker.finalize_recording")
 
 
